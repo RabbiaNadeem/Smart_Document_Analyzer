@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document Analyzer — Upload</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.10);
+      padding: 2.5rem 3rem;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.25rem;
+      color: #1a1a2e;
+    }
+
+    .subtitle {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-bottom: 2rem;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #c3c8d4;
+      border-radius: 8px;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+
+    .drop-zone.drag-over {
+      border-color: #4f46e5;
+      background: #eef2ff;
+    }
+
+    .drop-zone input[type="file"] {
+      display: none;
+    }
+
+    .drop-zone .icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .drop-zone p {
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+
+    .drop-zone .browse {
+      color: #4f46e5;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .allowed-types {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 0.4rem;
+    }
+
+    /* File preview */
+    #file-preview {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+      padding: 0.75rem 1rem;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    #file-preview .file-icon { font-size: 1.75rem; }
+
+    #file-preview .file-info { flex: 1; overflow: hidden; }
+
+    #file-preview .file-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #111827;
+    }
+
+    #file-preview .file-size {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    #remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: #9ca3af;
+      padding: 0.2rem;
+    }
+
+    #remove-btn:hover { color: #ef4444; }
+
+    /* Upload button */
+    #upload-btn {
+      display: block;
+      width: 100%;
+      margin-top: 1.5rem;
+      padding: 0.75rem;
+      background: #4f46e5;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+
+    #upload-btn:hover:not(:disabled) { background: #4338ca; }
+
+    #upload-btn:disabled {
+      background: #a5b4fc;
+      cursor: not-allowed;
+    }
+
+    /* Progress bar */
+    #progress-wrap {
+      display: none;
+      margin-top: 1rem;
+    }
+
+    #progress-bar-track {
+      background: #e5e7eb;
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    #progress-bar-fill {
+      background: #4f46e5;
+      height: 100%;
+      width: 0%;
+      transition: width .25s;
+    }
+
+    #progress-label {
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 0.3rem;
+    }
+
+    /* Result / error */
+    #result {
+      display: none;
+      margin-top: 1.25rem;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    #result.success {
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
+    }
+
+    #result.error {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+    }
+
+    #result .label { font-weight: 700; margin-bottom: 0.25rem; }
+    #result .file-id { font-family: monospace; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Document Analyzer</h1>
+    <p class="subtitle">Upload a file to begin analysis</p>
+
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv" />
+      <div class="icon">📄</div>
+      <p>Drag &amp; drop your file here, or <span class="browse" id="browse-btn">browse</span></p>
+      <p class="allowed-types">Accepted: PDF, DOCX, TXT, CSV &nbsp;·&nbsp; Max 10 MB</p>
+    </div>
+
+    <div id="file-preview">
+      <span class="file-icon" id="file-type-icon">📄</span>
+      <div class="file-info">
+        <div class="file-name" id="file-name-display"></div>
+        <div class="file-size" id="file-size-display"></div>
+      </div>
+      <button id="remove-btn" title="Remove file">✕</button>
+    </div>
+
+    <button id="upload-btn" disabled>Upload</button>
+
+    <div id="progress-wrap">
+      <div id="progress-bar-track">
+        <div id="progress-bar-fill"></div>
+      </div>
+      <div id="progress-label">Uploading…</div>
+    </div>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const dropZone   = document.getElementById('drop-zone');
+    const fileInput  = document.getElementById('file-input');
+    const browseBtn  = document.getElementById('browse-btn');
+    const filePreview = document.getElementById('file-preview');
+    const fileNameDisplay = document.getElementById('file-name-display');
+    const fileSizeDisplay = document.getElementById('file-size-display');
+    const removeBtn  = document.getElementById('remove-btn');
+    const uploadBtn  = document.getElementById('upload-btn');
+    const progressWrap = document.getElementById('progress-wrap');
+    const progressFill = document.getElementById('progress-bar-fill');
+    const progressLabel = document.getElementById('progress-label');
+    const resultBox  = document.getElementById('result');
+
+    const ICONS = { pdf: '📕', docx: '📘', txt: '📝', csv: '📊' };
+
+    let selectedFile = null;
+
+    // --- File selection helpers ---
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function setFile(file) {
+      selectedFile = file;
+      const ext = file.name.split('.').pop().toLowerCase();
+      fileNameDisplay.textContent = file.name;
+      fileSizeDisplay.textContent = formatBytes(file.size);
+      document.getElementById('file-type-icon').textContent = ICONS[ext] || '📄';
+      filePreview.style.display = 'flex';
+      uploadBtn.disabled = false;
+      resultBox.style.display = 'none';
+      clearProgress();
+    }
+
+    function clearFile() {
+      selectedFile = null;
+      fileInput.value = '';
+      filePreview.style.display = 'none';
+      uploadBtn.disabled = true;
+      clearProgress();
+      resultBox.style.display = 'none';
+    }
+
+    function clearProgress() {
+      progressWrap.style.display = 'none';
+      progressFill.style.width = '0%';
+      progressLabel.textContent = 'Uploading…';
+    }
+
+    // --- Drag & drop ---
+    browseBtn.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('click', e => {
+      if (e.target !== browseBtn) fileInput.click();
+    });
+
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0]);
+    });
+
+    removeBtn.addEventListener('click', clearFile);
+
+    // --- Upload ---
+    uploadBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      uploadBtn.disabled = true;
+      progressWrap.style.display = 'block';
+      resultBox.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      try {
+        // Use XHR for upload progress events
+        const response = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+
+          xhr.upload.addEventListener('progress', e => {
+            if (e.lengthComputable) {
+              const pct = Math.round((e.loaded / e.total) * 100);
+              progressFill.style.width = pct + '%';
+              progressLabel.textContent = `Uploading… ${pct}%`;
+            }
+          });
+
+          xhr.addEventListener('load', () => resolve(xhr));
+          xhr.addEventListener('error', () => reject(new Error('Network error')));
+          xhr.open('POST', '/api/upload');
+          xhr.send(formData);
+        });
+
+        progressFill.style.width = '100%';
+
+        let data;
+        try { data = JSON.parse(response.responseText); } catch { data = {}; }
+
+        if (response.status === 200) {
+          showResult('success', data.file_id, data.message || 'Upload successful');
+        } else {
+          const detail = data.detail || response.statusText || 'Unknown error';
+          showResult('error', null, `Error ${response.status}: ${detail}`);
+        }
+      } catch (err) {
+        showResult('error', null, err.message);
+      } finally {
+        uploadBtn.disabled = false;
+        progressLabel.textContent = 'Done';
+      }
+    });
+
+    function showResult(type, fileId, message) {
+      resultBox.className = `result ${type}`;  // reset
+      resultBox.classList.add(type);
+
+      if (type === 'success') {
+        resultBox.innerHTML = `
+          <div class="label">✅ ${message}</div>
+          <div>File ID: <span class="file-id">${fileId}</span></div>`;
+      } else {
+        resultBox.innerHTML = `<div class="label">❌ Upload failed</div><div>${message}</div>`;
+      }
+      resultBox.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
