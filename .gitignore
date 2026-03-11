@@ -12,6 +12,10 @@ __pycache__/
 # Environment variables
 .env
 
+# Ignore environment variants and local overrides
+.env.*
+.env.local
+
 # Other common ignores
 .DS_Store
 *.log
@@ -19,6 +23,10 @@ __pycache__/
 *.swp
 *.swo
 *~
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
 
 # IDE
 .vscode/
