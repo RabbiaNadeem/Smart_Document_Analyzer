@@ -35,3 +35,30 @@ def upload_to_storage(file_bytes: bytes, destination_path: str, content_type: st
 
     public_url: str = client.storage.from_(bucket).get_public_url(destination_path)
     return public_url
+
+
+def download_from_storage(file_id: str, ext: str) -> bytes:
+    """Download a previously uploaded file from Supabase Storage.
+
+    Args:
+        file_id: The UUID returned at upload time.
+        ext:     File extension including the leading dot (e.g. ``".pdf"``).
+
+    Returns:
+        Raw file bytes.
+
+    Raises:
+        FileNotFoundError: If the object does not exist in the bucket.
+    """
+    bucket = os.getenv("SUPABASE_BUCKET", "documents")
+    client = _get_client()
+    path = f"uploads/{file_id}{ext}"
+
+    try:
+        data: bytes = client.storage.from_(bucket).download(path)
+    except Exception as exc:
+        raise FileNotFoundError(
+            f"File '{path}' not found in storage bucket '{bucket}'."
+        ) from exc
+
+    return data
