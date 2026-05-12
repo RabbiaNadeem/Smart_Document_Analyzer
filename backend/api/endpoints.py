@@ -30,6 +30,9 @@ ALLOWED_MIME_TYPES: set[str] = {
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
+# Cap extracted text returned to clients (full text is still used for analysis).
+EXTRACTED_TEXT_PREVIEW_MAX = 12_000
+
 # Magic-byte signatures for binary formats (offset 0)
 _MAGIC_BYTES: dict[str, bytes] = {
     ".pdf": b"%PDF",
@@ -145,13 +148,19 @@ async def analyze_document(request: AnalyzeRequest) -> dict:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
 
-        # --- Analyse (Israa's class / mock until her module is ready) ---
+        # --- Analyse (Gemini via DocumentAnalyzer; heuristic fallback if unavailable) ---
         analyzer = DocumentAnalyzer(text)
+        preview = text[:EXTRACTED_TEXT_PREVIEW_MAX]
+        truncated = len(text) > EXTRACTED_TEXT_PREVIEW_MAX
         return {
             "summary": analyzer.summary(),
             "key_points": analyzer.key_points(),
             "entities": analyzer.entities(),
             "document_id": request.file_id,
+            "analysis_source": analyzer.analysis_source(),
+            "extracted_text_preview": preview,
+            "extracted_text_truncated": truncated,
+            "extracted_text_length": len(text),
         }
 
     except HTTPException:
@@ -163,4 +172,62 @@ async def analyze_document(request: AnalyzeRequest) -> dict:
         raise HTTPException(
             status_code=500,
             detail="An unexpected error occurred during analysis.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Ask (Q&A on uploaded document)
+# ---------------------------------------------------------------------------
+
+
+class AskRequest(BaseModel):
+    file_id: str
+    file_ext: str
+    question: str
+
+
+@router.post("/ask")
+async def ask_document(request: AskRequest) -> dict:
+    q = (request.question or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Question must not be empty.")
+
+    if request.file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid file extension '{request.file_ext}'. "
+                f"Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}."
+            ),
+        )
+
+    try:
+        try:
+            file_bytes = download_from_storage(request.file_id, request.file_ext)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No file found for file_id '{request.file_id}'.",
+            )
+
+        try:
+            text = extract_text_from_bytes(file_bytes, request.file_ext)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+        analyzer = DocumentAnalyzer(text)
+        answer = analyzer.answer_question(q)
+        return {
+            "answer": answer,
+            "document_id": request.file_id,
+            "analysis_source": analyzer.analysis_source(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error during Q&A for file_id=%s", request.file_id)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while answering your question.",
         )

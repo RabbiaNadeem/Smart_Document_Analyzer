@@ -1,55 +1,39 @@
-# ---------------------------------------------------------------------------
-# Israa's DocumentAnalyzer class lives here.
-# The implementation below is a MOCK — replace with the real class when ready.
-#
-# Interface contract (do NOT change method names or return types):
-#   __init__(text: str)
-#   .summary()    -> str
-#   .key_points() -> list[str]
-#   .entities()   -> dict  {"people": [...], "organizations": [...], "locations": [...]}
-# ---------------------------------------------------------------------------
+"""High-level document analysis facade over the Gemini AI layer."""
+
+from __future__ import annotations
+
+from backend.services import ai_analyzer
 
 
 class DocumentAnalyzer:
-    """Analyses pre-extracted text from a document.
+    """Analyses pre-extracted text: summary, key points, entities, and Q&A.
 
-    TODO: Replace the mock implementations below with Israa's real logic.
-    The public interface (method names + return types) must stay the same
-    so that the /api/analyze endpoint requires no changes after the swap.
+    Full analysis (summary + key points + entities) is computed once per
+    instance and cached. ``answer_question`` uses a separate model call.
     """
 
     def __init__(self, text: str) -> None:
         self._text = text
+        self._cached: ai_analyzer.DocumentAnalysisResult | None = None
+
+    def _analysis(self) -> ai_analyzer.DocumentAnalysisResult:
+        if self._cached is None:
+            self._cached = ai_analyzer.run_full_document_analysis(self._text)
+        return self._cached
 
     def summary(self) -> str:
-        """Return a short summary of the document.
-
-        TODO: replace with Israa's real implementation.
-        """
-        # MOCK — returns a placeholder until Israa's module is ready
-        return "Summary not yet available (mock response)."
+        return self._analysis().summary
 
     def key_points(self) -> list[str]:
-        """Return a list of key points extracted from the document.
-
-        TODO: replace with Israa's real implementation.
-        """
-        # MOCK — returns placeholder items until Israa's module is ready
-        return [
-            "Key point 1 (mock response).",
-            "Key point 2 (mock response).",
-            "Key point 3 (mock response).",
-        ]
+        return list(self._analysis().key_points)
 
     def entities(self) -> dict:
-        """Return named entities found in the document.
+        """Structured buckets aligned with the results dashboard."""
+        return {k: list(v) for k, v in self._analysis().entities.items()}
 
-        TODO: replace with Israa's real implementation.
-        Returns a dict with keys: 'people', 'organizations', 'locations'.
-        """
-        # MOCK — returns empty entity lists until Israa's module is ready
-        return {
-            "people": [],
-            "organizations": [],
-            "locations": [],
-        }
+    def analysis_source(self) -> str:
+        """``gemini`` or ``fallback`` (no key / model error)."""
+        return self._analysis().source
+
+    def answer_question(self, question: str) -> str:
+        return ai_analyzer.answer_question(self._text, question)
