@@ -11,20 +11,22 @@ import docx
 # ---------------------------------------------------------------------------
 
 def extract_text(file_path: str, file_type: str | None = None) -> str:
-    """Extract readable text from a document file.
+    """Extract readable text from a document on disk.
+
+    ``file_type`` should be a lower-case extension (e.g. ``\".pdf\"``). If
+    omitted, the extension is taken from ``file_path``.
 
     Args:
-        file_path: Absolute or relative path to the file, OR a raw filename
-                   whose extension is used when ``file_type`` is not supplied.
-        file_type:  Explicit extension (e.g. ``".pdf"``). If omitted the
-                    extension is inferred from *file_path*.
+        file_path: Path to the file.
+        file_type: Extension including the dot; inferred from ``file_path``
+            when omitted.
 
     Returns:
-        Extracted text as a single string (UTF-8, normalised whitespace).
+        Extracted text as a single string.
 
     Raises:
         ValueError: Unsupported file type.
-        FileNotFoundError: File does not exist at *file_path*.
+        FileNotFoundError: File does not exist at ``file_path``.
     """
     ext = (file_type or os.path.splitext(file_path)[1]).lower().strip()
 
@@ -32,10 +34,10 @@ def extract_text(file_path: str, file_type: str | None = None) -> str:
         raise FileNotFoundError(f"File not found: {file_path}")
 
     handlers = {
-        ".pdf":  _extract_pdf,
+        ".pdf": _extract_pdf,
         ".docx": _extract_docx,
-        ".txt":  _extract_txt,
-        ".csv":  _extract_csv,
+        ".txt": _extract_txt,
+        ".csv": _extract_csv,
     }
 
     if ext not in handlers:
@@ -47,17 +49,14 @@ def extract_text(file_path: str, file_type: str | None = None) -> str:
 
 
 def extract_text_from_bytes(file_bytes: bytes, ext: str) -> str:
-    """Extract text directly from bytes without writing to disk.
-
-    Useful when the file is already in memory (e.g., right after upload).
-    """
+    """Extract text from in-memory file bytes (same formats as ``extract_text``)."""
     ext = ext.lower().strip()
 
     handlers = {
-        ".pdf":  _extract_pdf_bytes,
+        ".pdf": _extract_pdf_bytes,
         ".docx": _extract_docx_bytes,
-        ".txt":  _extract_txt_bytes,
-        ".csv":  _extract_csv_bytes,
+        ".txt": _extract_txt_bytes,
+        ".csv": _extract_csv_bytes,
     }
 
     if ext not in handlers:
@@ -69,17 +68,22 @@ def extract_text_from_bytes(file_bytes: bytes, ext: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# File-path based helpers
+# Path-based extraction (PyPDF2 / python-docx / open / pandas)
 # ---------------------------------------------------------------------------
 
 def _extract_pdf(file_path: str) -> str:
     with open(file_path, "rb") as fh:
-        return _extract_pdf_bytes(fh.read())
+        reader = PyPDF2.PdfReader(fh)
+        parts: list[str] = []
+        for page in reader.pages:
+            parts.append(page.extract_text() or "")
+    return _normalise("\n".join(parts))
 
 
 def _extract_docx(file_path: str) -> str:
-    with open(file_path, "rb") as fh:
-        return _extract_docx_bytes(fh.read())
+    document = docx.Document(file_path)
+    paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
+    return _normalise("\n".join(paragraphs))
 
 
 def _extract_txt(file_path: str) -> str:
@@ -88,8 +92,8 @@ def _extract_txt(file_path: str) -> str:
 
 
 def _extract_csv(file_path: str) -> str:
-    with open(file_path, "rb") as fh:
-        return _extract_csv_bytes(fh.read())
+    df = pd.read_csv(file_path)
+    return _normalise(df.to_string(index=False))
 
 
 # ---------------------------------------------------------------------------
@@ -98,16 +102,15 @@ def _extract_csv(file_path: str) -> str:
 
 def _extract_pdf_bytes(data: bytes) -> str:
     reader = PyPDF2.PdfReader(io.BytesIO(data))
-    pages: list[str] = []
+    parts: list[str] = []
     for page in reader.pages:
-        text = page.extract_text() or ""
-        pages.append(text)
-    return _normalise("\n".join(pages))
+        parts.append(page.extract_text() or "")
+    return _normalise("\n".join(parts))
 
 
 def _extract_docx_bytes(data: bytes) -> str:
     document = docx.Document(io.BytesIO(data))
-    paragraphs = [para.text for para in document.paragraphs if para.text.strip()]
+    paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
     return _normalise("\n".join(paragraphs))
 
 
@@ -117,11 +120,7 @@ def _extract_txt_bytes(data: bytes) -> str:
 
 def _extract_csv_bytes(data: bytes) -> str:
     df = pd.read_csv(io.BytesIO(data))
-    # Build a human-readable representation: header + rows
-    lines: list[str] = [", ".join(df.columns.astype(str))]
-    for _, row in df.iterrows():
-        lines.append(", ".join(row.astype(str)))
-    return _normalise("\n".join(lines))
+    return _normalise(df.to_string(index=False))
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +128,7 @@ def _extract_csv_bytes(data: bytes) -> str:
 # ---------------------------------------------------------------------------
 
 def _normalise(text: str) -> str:
-    """Strip leading/trailing whitespace and collapse excessive blank lines."""
+    """Strip trailing spaces per line and collapse excessive blank lines."""
     lines = text.splitlines()
     result: list[str] = []
     blank_run = 0
@@ -137,7 +136,7 @@ def _normalise(text: str) -> str:
         stripped = line.rstrip()
         if stripped == "":
             blank_run += 1
-            if blank_run <= 1:          # allow at most one consecutive blank line
+            if blank_run <= 1:
                 result.append("")
         else:
             blank_run = 0

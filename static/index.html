@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Document Analyzer — Upload</title>
+  <title>Document Analyzer — Upload &amp; Analyze</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -12,8 +12,9 @@
       background: #f0f2f5;
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
+      padding: 2rem 1rem;
     }
 
     .card {
@@ -22,7 +23,7 @@
       box-shadow: 0 4px 24px rgba(0,0,0,.10);
       padding: 2.5rem 3rem;
       width: 100%;
-      max-width: 480px;
+      max-width: 720px;
     }
 
     h1 {
@@ -37,7 +38,6 @@
       margin-bottom: 2rem;
     }
 
-    /* Drop zone */
     .drop-zone {
       border: 2px dashed #c3c8d4;
       border-radius: 8px;
@@ -52,19 +52,14 @@
       background: #eef2ff;
     }
 
-    .drop-zone input[type="file"] {
-      display: none;
-    }
+    .drop-zone input[type="file"] { display: none; }
 
     .drop-zone .icon {
       font-size: 2.5rem;
       margin-bottom: 0.75rem;
     }
 
-    .drop-zone p {
-      color: #6b7280;
-      font-size: 0.9rem;
-    }
+    .drop-zone p { color: #6b7280; font-size: 0.9rem; }
 
     .drop-zone .browse {
       color: #4f46e5;
@@ -79,7 +74,6 @@
       margin-top: 0.4rem;
     }
 
-    /* File preview */
     #file-preview {
       display: none;
       align-items: center;
@@ -92,7 +86,6 @@
     }
 
     #file-preview .file-icon { font-size: 1.75rem; }
-
     #file-preview .file-info { flex: 1; overflow: hidden; }
 
     #file-preview .file-name {
@@ -104,10 +97,7 @@
       color: #111827;
     }
 
-    #file-preview .file-size {
-      font-size: 0.75rem;
-      color: #6b7280;
-    }
+    #file-preview .file-size { font-size: 0.75rem; color: #6b7280; }
 
     #remove-btn {
       background: none;
@@ -120,30 +110,44 @@
 
     #remove-btn:hover { color: #ef4444; }
 
-    /* Upload button */
-    #upload-btn {
-      display: block;
-      width: 100%;
+    .actions {
+      display: flex;
+      gap: 0.75rem;
       margin-top: 1.5rem;
-      padding: 0.75rem;
-      background: #4f46e5;
-      color: #fff;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 0.75rem 1rem;
       font-size: 1rem;
       font-weight: 600;
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      transition: background .2s;
+      transition: background .2s, opacity .2s;
     }
 
-    #upload-btn:hover:not(:disabled) { background: #4338ca; }
+    .btn-primary {
+      background: #4f46e5;
+      color: #fff;
+    }
 
-    #upload-btn:disabled {
-      background: #a5b4fc;
+    .btn-primary:hover:not(:disabled) { background: #4338ca; }
+
+    .btn-secondary {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+
+    .btn-secondary:hover:not(:disabled) { background: #c7d2fe; }
+
+    .btn:disabled {
+      opacity: 0.55;
       cursor: not-allowed;
     }
 
-    /* Progress bar */
     #progress-wrap {
       display: none;
       margin-top: 1rem;
@@ -169,42 +173,110 @@
       margin-top: 0.3rem;
     }
 
-    /* Result / error */
-    #result {
+    .panel {
       display: none;
-      margin-top: 1.25rem;
-      padding: 1rem 1.25rem;
+      margin-top: 1.5rem;
+      padding: 1.25rem;
       border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #fafafa;
+    }
+
+    .panel.visible { display: block; }
+
+    .panel h2 {
+      font-size: 0.95rem;
+      color: #374151;
+      margin-bottom: 0.75rem;
+      font-weight: 700;
+    }
+
+    .panel.success { background: #ecfdf5; border-color: #6ee7b7; }
+    .panel.error { background: #fef2f2; border-color: #fca5a5; }
+
+    .file-id { font-family: ui-monospace, monospace; word-break: break-all; font-size: 0.8rem; }
+
+    #analysis-panel {
+      display: none;
+      margin-top: 1.5rem;
+    }
+
+    #analysis-panel.visible { display: block; }
+
+    .analysis-block {
+      margin-bottom: 1.25rem;
+    }
+
+    .analysis-block:last-child { margin-bottom: 0; }
+
+    .analysis-block h3 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #6b7280;
+      margin-bottom: 0.5rem;
+    }
+
+    .analysis-block pre {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.75rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 280px;
+      overflow: auto;
+      padding: 0.75rem;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      color: #1f2937;
+    }
+
+    .analysis-block .summary-text {
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #374151;
+    }
+
+    .analysis-block ul {
+      margin-left: 1.1rem;
+      color: #374151;
       font-size: 0.875rem;
       line-height: 1.5;
     }
 
-    #result.success {
-      background: #ecfdf5;
-      border: 1px solid #6ee7b7;
-      color: #065f46;
+    .entities-grid {
+      display: grid;
+      gap: 0.5rem;
+      font-size: 0.8rem;
     }
 
-    #result.error {
-      background: #fef2f2;
-      border: 1px solid #fca5a5;
-      color: #991b1b;
+    .entities-grid .entity-group {
+      padding: 0.5rem 0.75rem;
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
     }
 
-    #result .label { font-weight: 700; margin-bottom: 0.25rem; }
-    #result .file-id { font-family: monospace; word-break: break-all; }
+    .entities-grid strong { color: #4b5563; }
+
+    .meta-hint {
+      font-size: 0.7rem;
+      color: #9ca3af;
+      margin-top: 0.35rem;
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Document Analyzer</h1>
-    <p class="subtitle">Upload a file to begin analysis</p>
+    <p class="subtitle">Upload a PDF, DOCX, TXT, or CSV — then extract text and run analysis</p>
 
     <div class="drop-zone" id="drop-zone">
       <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv" />
       <div class="icon">📄</div>
       <p>Drag &amp; drop your file here, or <span class="browse" id="browse-btn">browse</span></p>
-      <p class="allowed-types">Accepted: PDF, DOCX, TXT, CSV &nbsp;·&nbsp; Max 10 MB</p>
+      <p class="allowed-types">Accepted: PDF, DOCX, TXT, CSV · Max 10 MB</p>
     </div>
 
     <div id="file-preview">
@@ -213,10 +285,13 @@
         <div class="file-name" id="file-name-display"></div>
         <div class="file-size" id="file-size-display"></div>
       </div>
-      <button id="remove-btn" title="Remove file">✕</button>
+      <button type="button" id="remove-btn" title="Remove file">✕</button>
     </div>
 
-    <button id="upload-btn" disabled>Upload</button>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="upload-btn" disabled>Upload</button>
+      <button type="button" class="btn btn-secondary" id="analyze-btn" disabled>Analyze</button>
+    </div>
 
     <div id="progress-wrap">
       <div id="progress-bar-track">
@@ -225,32 +300,41 @@
       <div id="progress-label">Uploading…</div>
     </div>
 
-    <div id="result"></div>
+    <div class="panel" id="upload-result"></div>
+    <div id="analysis-panel"></div>
   </div>
 
   <script>
-    const dropZone   = document.getElementById('drop-zone');
-    const fileInput  = document.getElementById('file-input');
-    const browseBtn  = document.getElementById('browse-btn');
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const browseBtn = document.getElementById('browse-btn');
     const filePreview = document.getElementById('file-preview');
     const fileNameDisplay = document.getElementById('file-name-display');
     const fileSizeDisplay = document.getElementById('file-size-display');
-    const removeBtn  = document.getElementById('remove-btn');
-    const uploadBtn  = document.getElementById('upload-btn');
+    const removeBtn = document.getElementById('remove-btn');
+    const uploadBtn = document.getElementById('upload-btn');
+    const analyzeBtn = document.getElementById('analyze-btn');
     const progressWrap = document.getElementById('progress-wrap');
     const progressFill = document.getElementById('progress-bar-fill');
     const progressLabel = document.getElementById('progress-label');
-    const resultBox  = document.getElementById('result');
+    const uploadResult = document.getElementById('upload-result');
+    const analysisPanel = document.getElementById('analysis-panel');
 
     const ICONS = { pdf: '📕', docx: '📘', txt: '📝', csv: '📊' };
 
     let selectedFile = null;
+    let uploadedFileId = null;
+    let uploadedFileExt = null;
 
-    // --- File selection helpers ---
     function formatBytes(bytes) {
       if (bytes < 1024) return bytes + ' B';
       if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
       return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function fileExtension(name) {
+      const i = name.lastIndexOf('.');
+      return i >= 0 ? name.slice(i).toLowerCase() : '';
     }
 
     function setFile(file) {
@@ -261,7 +345,12 @@
       document.getElementById('file-type-icon').textContent = ICONS[ext] || '📄';
       filePreview.style.display = 'flex';
       uploadBtn.disabled = false;
-      resultBox.style.display = 'none';
+      uploadedFileId = null;
+      uploadedFileExt = null;
+      analyzeBtn.disabled = true;
+      hideUploadResult();
+      analysisPanel.classList.remove('visible');
+      analysisPanel.innerHTML = '';
       clearProgress();
     }
 
@@ -270,8 +359,18 @@
       fileInput.value = '';
       filePreview.style.display = 'none';
       uploadBtn.disabled = true;
+      analyzeBtn.disabled = true;
+      uploadedFileId = null;
+      uploadedFileExt = null;
+      hideUploadResult();
+      analysisPanel.classList.remove('visible');
+      analysisPanel.innerHTML = '';
       clearProgress();
-      resultBox.style.display = 'none';
+    }
+
+    function hideUploadResult() {
+      uploadResult.classList.remove('visible', 'success', 'error');
+      uploadResult.innerHTML = '';
     }
 
     function clearProgress() {
@@ -280,7 +379,11 @@
       progressLabel.textContent = 'Uploading…';
     }
 
-    // --- Drag & drop ---
+    function showUploadMessage(type, html) {
+      uploadResult.className = 'panel visible ' + type;
+      uploadResult.innerHTML = html;
+    }
+
     browseBtn.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('click', e => {
       if (e.target !== browseBtn) fileInput.click();
@@ -306,67 +409,144 @@
 
     removeBtn.addEventListener('click', clearFile);
 
-    // --- Upload ---
     uploadBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
 
       uploadBtn.disabled = true;
+      analyzeBtn.disabled = true;
       progressWrap.style.display = 'block';
-      resultBox.style.display = 'none';
+      hideUploadResult();
+      analysisPanel.classList.remove('visible');
+      analysisPanel.innerHTML = '';
 
       const formData = new FormData();
       formData.append('file', selectedFile);
 
       try {
-        // Use XHR for upload progress events
-        const response = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-
-          xhr.upload.addEventListener('progress', e => {
+        const xhr = await new Promise((resolve, reject) => {
+          const x = new XMLHttpRequest();
+          x.upload.addEventListener('progress', e => {
             if (e.lengthComputable) {
               const pct = Math.round((e.loaded / e.total) * 100);
               progressFill.style.width = pct + '%';
-              progressLabel.textContent = `Uploading… ${pct}%`;
+              progressLabel.textContent = 'Uploading… ' + pct + '%';
             }
           });
-
-          xhr.addEventListener('load', () => resolve(xhr));
-          xhr.addEventListener('error', () => reject(new Error('Network error')));
-          xhr.open('POST', '/api/upload');
-          xhr.send(formData);
+          x.addEventListener('load', () => resolve(x));
+          x.addEventListener('error', () => reject(new Error('Network error')));
+          x.open('POST', '/api/upload');
+          x.send(formData);
         });
 
         progressFill.style.width = '100%';
 
-        let data;
-        try { data = JSON.parse(response.responseText); } catch { data = {}; }
+        let data = {};
+        try { data = JSON.parse(xhr.responseText); } catch (_) {}
 
-        if (response.status === 200) {
-          showResult('success', data.file_id, data.message || 'Upload successful');
+        if (xhr.status === 200) {
+          uploadedFileId = data.file_id;
+          uploadedFileExt = data.file_ext || fileExtension(selectedFile.name);
+          analyzeBtn.disabled = !uploadedFileId;
+          showUploadMessage('success',
+            '<h2>Upload complete</h2>' +
+            '<p>File ID: <span class="file-id">' + escapeHtml(uploadedFileId) + '</span></p>' +
+            '<p style="margin-top:0.5rem;font-size:0.85rem;color:#065f46">You can run <strong>Analyze</strong> to extract text and view the summary.</p>'
+          );
         } else {
-          const detail = data.detail || response.statusText || 'Unknown error';
-          showResult('error', null, `Error ${response.status}: ${detail}`);
+          uploadedFileId = null;
+          uploadedFileExt = null;
+          const detail = typeof data.detail === 'string' ? data.detail : (xhr.statusText || 'Unknown error');
+          showUploadMessage('error',
+            '<h2>Upload failed</h2><p>' + escapeHtml(String(detail)) + '</p>'
+          );
         }
       } catch (err) {
-        showResult('error', null, err.message);
+        uploadedFileId = null;
+        uploadedFileExt = null;
+        showUploadMessage('error', '<h2>Upload failed</h2><p>' + escapeHtml(err.message) + '</p>');
       } finally {
         uploadBtn.disabled = false;
+        analyzeBtn.disabled = !uploadedFileId;
         progressLabel.textContent = 'Done';
       }
     });
 
-    function showResult(type, fileId, message) {
-      resultBox.className = `result ${type}`;  // reset
-      resultBox.classList.add(type);
+    analyzeBtn.addEventListener('click', async () => {
+      if (!uploadedFileId || !uploadedFileExt) return;
 
-      if (type === 'success') {
-        resultBox.innerHTML = `
-          <div class="label">✅ ${message}</div>
-          <div>File ID: <span class="file-id">${fileId}</span></div>`;
-      } else {
-        resultBox.innerHTML = `<div class="label">❌ Upload failed</div><div>${message}</div>`;
+      analyzeBtn.disabled = true;
+      uploadBtn.disabled = true;
+      progressWrap.style.display = 'block';
+      progressFill.style.width = '0%';
+      progressLabel.textContent = 'Extracting & analyzing…';
+      analysisPanel.classList.remove('visible');
+      analysisPanel.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_id: uploadedFileId, file_ext: uploadedFileExt }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          const detail = typeof data.detail === 'string' ? data.detail : res.statusText;
+          analysisPanel.innerHTML =
+            '<div class="panel visible error"><h2>Analysis failed</h2><p>' +
+            escapeHtml(detail) + '</p></div>';
+          analysisPanel.classList.add('visible');
+          return;
+        }
+
+        const truncNote = data.extracted_text_truncated
+          ? '<p class="meta-hint">Showing first ' + escapeHtml(String(data.extracted_text_preview?.length ?? 0)) +
+            ' characters of ' + escapeHtml(String(data.extracted_text_length ?? '')) + ' total.</p>'
+          : '';
+
+        const keyPoints = Array.isArray(data.key_points) ? data.key_points : [];
+        const kpHtml = keyPoints.length
+          ? '<ul>' + keyPoints.map(k => '<li>' + escapeHtml(String(k)) + '</li>').join('') + '</ul>'
+          : '<p class="summary-text">—</p>';
+
+        const ent = data.entities && typeof data.entities === 'object' ? data.entities : {};
+        const entityRows = ['people', 'organizations', 'locations'].map(key => {
+          const arr = Array.isArray(ent[key]) ? ent[key] : [];
+          return '<div class="entity-group"><strong>' + escapeHtml(key) + '</strong>: ' +
+            (arr.length ? arr.map(escapeHtml).join(', ') : '—') + '</div>';
+        }).join('');
+
+        analysisPanel.innerHTML =
+          '<div class="analysis-block"><h3>Extracted text</h3>' +
+          '<pre id="extracted-pre">' + escapeHtml(data.extracted_text_preview || '') + '</pre>' +
+          truncNote + '</div>' +
+          '<div class="analysis-block"><h3>Summary</h3>' +
+          '<p class="summary-text">' + escapeHtml(data.summary || '') + '</p></div>' +
+          '<div class="analysis-block"><h3>Key points</h3>' + kpHtml + '</div>' +
+          '<div class="analysis-block"><h3>Entities</h3><div class="entities-grid">' +
+          entityRows + '</div></div>';
+
+        analysisPanel.classList.add('visible');
+        progressFill.style.width = '100%';
+      } catch (err) {
+        analysisPanel.innerHTML =
+          '<div class="panel visible error"><h2>Analysis failed</h2><p>' +
+          escapeHtml(err.message) + '</p></div>';
+        analysisPanel.classList.add('visible');
+      } finally {
+        analyzeBtn.disabled = false;
+        uploadBtn.disabled = false;
+        progressLabel.textContent = 'Done';
+        setTimeout(() => { progressWrap.style.display = 'none'; }, 400);
       }
-      resultBox.style.display = 'block';
+    });
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
   </script>
 </body>

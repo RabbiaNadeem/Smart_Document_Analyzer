@@ -30,6 +30,9 @@ ALLOWED_MIME_TYPES: set[str] = {
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
+# Cap extracted text returned to clients (full text is still used for analysis).
+EXTRACTED_TEXT_PREVIEW_MAX = 12_000
+
 # Magic-byte signatures for binary formats (offset 0)
 _MAGIC_BYTES: dict[str, bytes] = {
     ".pdf": b"%PDF",
@@ -147,11 +150,16 @@ async def analyze_document(request: AnalyzeRequest) -> dict:
 
         # --- Analyse (Israa's class / mock until her module is ready) ---
         analyzer = DocumentAnalyzer(text)
+        preview = text[:EXTRACTED_TEXT_PREVIEW_MAX]
+        truncated = len(text) > EXTRACTED_TEXT_PREVIEW_MAX
         return {
             "summary": analyzer.summary(),
             "key_points": analyzer.key_points(),
             "entities": analyzer.entities(),
             "document_id": request.file_id,
+            "extracted_text_preview": preview,
+            "extracted_text_truncated": truncated,
+            "extracted_text_length": len(text),
         }
 
     except HTTPException:
