@@ -68,9 +68,13 @@ Create a `.env` file in the project root:
 SUPABASE_URL=https://<your-project>.supabase.co
 SUPABASE_SERVICE_KEY=<your-service-role-key>
 SUPABASE_BUCKET=documents
+GEMINI_API_KEY=<your-google-ai-studio-api-key>
+# Optional: GEMINI_MODEL=gemini-2.5-flash
 ```
 
 > The service key is privileged — never commit it. `.env` is already gitignored.
+> Set `GEMINI_API_KEY` for Gemini-powered summaries, entities, and Q&A; if it is
+> missing, the app uses a local heuristic fallback (see `backend/services/ai_analyzer.py`).
 
 ---
 
@@ -156,25 +160,26 @@ Run analysis against a previously uploaded file.
 
 ```json
 {
-  "summary": "Summary not yet available (mock response).",
-  "key_points": [
-    "Key point 1 (mock response).",
-    "Key point 2 (mock response).",
-    "Key point 3 (mock response)."
-  ],
+  "summary": "Executive summary paragraph…",
+  "key_points": ["…", "…"],
   "entities": {
-    "people": [],
-    "organizations": [],
-    "locations": []
+    "monetary_values": ["$150,000 (budget)"],
+    "dates": ["Q2 2026"],
+    "organizations": ["Example Corp"],
+    "key_metrics": ["3.5x ROI"]
   },
-  "document_id": "f7d3a8e2-9c11-4b6d-9a87-1c4f2e6b8a31"
+  "document_id": "f7d3a8e2-9c11-4b6d-9a87-1c4f2e6b8a31",
+  "analysis_source": "gemini",
+  "extracted_text_preview": "…",
+  "extracted_text_truncated": false,
+  "extracted_text_length": 1200
 }
 ```
 
-> The analysis values are placeholders today — see
+> Analysis is produced by Google Gemini when `GEMINI_API_KEY` is set; otherwise
+> the service returns a heuristic fallback. Implementation:
+> [`backend/services/ai_analyzer.py`](backend/services/ai_analyzer.py) and
 > [`backend/services/document_analyzer.py`](backend/services/document_analyzer.py).
-> The public interface (`summary()`, `key_points()`, `entities()`) is stable so
-> the endpoint requires no changes when the real analyzer lands.
 
 **Error responses**
 
@@ -195,6 +200,38 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ---
 
+### `POST /api/ask`
+
+Answer a natural-language question using only the text of a previously uploaded file.
+
+**Request** (`application/json`)
+
+```json
+{
+  "file_id": "f7d3a8e2-9c11-4b6d-9a87-1c4f2e6b8a31",
+  "file_ext": ".pdf",
+  "question": "What is the total budget?"
+}
+```
+
+**Success — `200 OK`**
+
+```json
+{
+  "answer": "…",
+  "document_id": "f7d3a8e2-9c11-4b6d-9a87-1c4f2e6b8a31",
+  "analysis_source": "gemini"
+}
+```
+
+| Status | When |
+|-------:|------|
+| `400`  | Empty question or invalid `file_ext` |
+| `404`  | File not in storage |
+| `422`  | Text extraction failed |
+
+---
+
 ## Project structure
 
 ```
@@ -209,14 +246,17 @@ document_analyzer/
 │   └── index.html                # Drag-and-drop UI
 ├── backend/
 │   ├── api/
-│   │   └── endpoints.py          # /api/upload and /api/analyze
+│   │   └── endpoints.py          # /api/upload, /api/analyze, /api/ask
 │   ├── services/
 │   │   ├── supabase_service.py   # Upload / download to Supabase Storage
 │   │   ├── document_processor.py # Text extraction (path + bytes APIs)
-│   │   └── document_analyzer.py  # Summary / key points / entities (mock)
+│   │   ├── ai_analyzer.py        # Gemini prompts + JSON + fallbacks
+│   │   └── document_analyzer.py  # Facade over ai_analyzer (cached full run)
 │   └── utils/
 └── tests/
     ├── test_document_processor.py
+    ├── test_analyzer.py
+    ├── sample_docs/              # e.g. marketing_proposal.txt
     └── sample_files/             # sample.pdf / .docx / .txt / .csv
 ```
 
