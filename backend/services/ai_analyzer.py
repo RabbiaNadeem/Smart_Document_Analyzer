@@ -48,6 +48,14 @@ class DocumentAnalysisResult:
     source: str  # "gemini" | "fallback"
 
 
+@dataclass(frozen=True)
+class QuestionAnswer:
+    """Single Q&A turn from the model or fallback."""
+
+    text: str
+    source: str  # "gemini" | "fallback"
+
+
 # ---------------------------------------------------------------------------
 # Prompts (JSON-only responses)
 # ---------------------------------------------------------------------------
@@ -70,7 +78,7 @@ Schema (all keys required):
 Rules:
 - Base every field ONLY on the supplied document. Do not invent facts.
 - If a category has nothing in the text, use an empty array [].
-- key_points: 5–12 items when the document is rich enough; fewer for short docs.
+- key_points: at most 8 items; use fewer for short or sparse documents. Pick the most important facts only.
 - Keep strings short and scannable (dashboard display).
 - monetary_values: include currency symbols and brief context in parentheses when useful.
 """
@@ -79,8 +87,96 @@ Rules:
 _ANSWER_INSTRUCTIONS = """You answer questions using ONLY the provided document.
 If the document does not contain enough information, respond with a short sentence stating that the document does not specify this.
 
+Ambiguous or non-questions (critical):
+- If the user's message is filler, an interjection, or too vague to answer as a real question (examples: "hmmm", "hmm", "ok", "okay", "thanks", "wow", "interesting", single-word reactions), respond in exactly ONE short sentence: briefly acknowledge or ask what specific detail they want from the document.
+- Do NOT respond with a long overview, full profile recap, bullet list, or restated executive summary unless they clearly ask for a summary, overview, or to describe the person or document as a whole.
+- Do NOT repeat prior answers at length just because follow-up context exists; only use prior Q&A to resolve references like "that role" or "point 2".
+
+Prefer concise, direct answers (usually 1–3 sentences). Use a fourth sentence only when the question clearly needs it.
+
 Return ONE JSON object: {"answer": "<plain text, 1–4 sentences, no markdown>"}
 No markdown fences, no extra keys."""
+
+_MAX_QA_CONVERSATION_TURNS = 10
+_MAX_INSIGHTS_BLOCK_CHARS = 8_000
+_MAX_CONVERSATION_BLOCK_CHARS = 4_000
+
+_FOLLOWUP_CONTEXT_RULES = """
+Follow-up context:
+- You may see --- PRIOR ANALYSIS --- (summary, key points, entities from an earlier pass) and/or --- PRIOR Q&A --- (earlier questions and answers in this session).
+- Use them to interpret follow-up questions: pronouns, "the summary", "point 2", "what you said about the budget", etc.
+- Ground every factual claim in --- DOCUMENT ---. If the document contradicts prior analysis, trust the document and note the discrepancy briefly.
+- If something appears only in prior analysis or prior Q&A but is not supported by the document, say the document does not clearly state it.
+- Prior sections are for disambiguation only; a vague interjection in QUESTION is not permission to dump the prior analysis or re-summarize the document.
+"""
+
+
+def _format_insights_block(insights: dict[str, Any]) -> str:
+    lines: list[str] = []
+    summary = str(insights.get("summary") or "").strip()
+    if summary:
+        lines.append(f"Summary:\n{summary}")
+    kps = insights.get("key_points")
+    if isinstance(kps, list):
+        numbered = [kp.strip() for kp in kps if isinstance(kp, str) and kp.strip()]
+        if numbered:
+            lines.append("Key points:")
+            for i, kp in enumerate(numbered[:20], 1):
+                lines.append(f"  {i}. {kp}")
+    ent = insights.get("entities")
+    if isinstance(ent, dict):
+        lines.append("Entities:")
+        for key, vs in ent.items():
+            if not isinstance(vs, list):
+                continue
+            vals = [str(v).strip() for v in vs if v is not None and str(v).strip()]
+            if vals:
+                lines.append(f"  {key}: {', '.join(vals[:40])}")
+    text = "\n".join(lines).strip()
+    if len(text) > _MAX_INSIGHTS_BLOCK_CHARS:
+        text = text[: _MAX_INSIGHTS_BLOCK_CHARS - 3] + "..."
+    return text
+
+
+def _format_conversation_block(turns: list[dict[str, str]]) -> str:
+    sliced = turns[-_MAX_QA_CONVERSATION_TURNS:]
+    blocks: list[str] = []
+    for t in sliced:
+        q = str(t.get("question") or "").strip()
+        a = str(t.get("answer") or "").strip()
+        if q and a:
+            blocks.append(f"Q: {q}\nA: {a}")
+    text = "\n\n".join(blocks).strip()
+    if len(text) > _MAX_CONVERSATION_BLOCK_CHARS:
+        text = text[: _MAX_CONVERSATION_BLOCK_CHARS - 3] + "..."
+    return text
+
+
+def _build_qa_prompt(
+    body: str,
+    question: str,
+    *,
+    insights: dict[str, Any] | None,
+    conversation: list[dict[str, str]] | None,
+) -> str:
+    has_ctx = bool(insights or conversation)
+    ib = _format_insights_block(insights) if insights else ""
+    cb = _format_conversation_block(conversation) if conversation else ""
+
+    parts: list[str] = [_ANSWER_INSTRUCTIONS.strip()]
+    if has_ctx:
+        parts.append(_FOLLOWUP_CONTEXT_RULES.strip())
+    if ib:
+        parts.append("\n--- PRIOR ANALYSIS ---\n" + ib)
+    if cb:
+        parts.append("\n--- PRIOR Q&A ---\n" + cb)
+    parts.append(
+        "\n\n--- DOCUMENT START ---\n"
+        + body
+        + "\n--- DOCUMENT END ---\n\nQUESTION:\n"
+        + question.strip()
+    )
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -131,33 +227,71 @@ def extract_entities(document_text: str) -> dict[str, list[str]]:
     return {k: list(v) for k, v in run_full_document_analysis(document_text).entities.items()}
 
 
-def answer_question(document_text: str, question: str) -> str:
-    """Answer a natural-language question strictly from the document."""
+_FILLER_QUESTION_RE = re.compile(
+    r"(?i)^(?:h+m+|u+m+|u+h+|ok(?:ay)?|k\b|thanks?|thx|ty|yeah|yep|nah|nope|maybe|wow|"
+    r"interesting|right|sure|got\s*it|cool|nice|i see)[\s.!…?]*$"
+)
+
+_FILLER_REPLY = (
+    "I'm not sure what you'd like to know—what specific detail should I look for in this document?"
+)
+
+
+def _looks_like_filler_question(question: str) -> bool:
+    s = (question or "").strip()
+    if not s:
+        return True
+    if _FILLER_QUESTION_RE.match(s):
+        return True
+    if not re.search(r"[a-z0-9]", s, re.I):
+        return True
+    return False
+
+
+def answer_question(
+    document_text: str,
+    question: str,
+    *,
+    insights: dict[str, Any] | None = None,
+    conversation: list[dict[str, str]] | None = None,
+) -> QuestionAnswer:
+    """Answer a question strictly from the document, with optional prior analysis and Q&A for follow-ups."""
     q = (question or "").strip()
     if not q:
-        return "Please provide a non-empty question."
+        return QuestionAnswer(text="Please provide a non-empty question.", source="fallback")
+
+    if _looks_like_filler_question(q):
+        return QuestionAnswer(text=_FILLER_REPLY, source="fallback")
 
     body = _truncate(document_text)
     if not _gemini_configured():
-        return _fallback_answer(body, q, reason="missing_key")
+        return QuestionAnswer(
+            text=_fallback_answer(body, q, reason="missing_key"),
+            source="fallback",
+        )
 
-    prompt = (
-        _ANSWER_INSTRUCTIONS
-        + "\n\n--- DOCUMENT START ---\n"
-        + body
-        + "\n--- DOCUMENT END ---\n\nQUESTION:\n"
-        + q
+    prompt = _build_qa_prompt(
+        body,
+        q,
+        insights=insights,
+        conversation=conversation,
     )
     try:
         raw = _invoke_gemini(prompt)
         data = _parse_json_object(raw)
         ans = data.get("answer")
         if isinstance(ans, str) and ans.strip():
-            return ans.strip()
-        return _fallback_answer(body, q, reason="api_error")
+            return QuestionAnswer(text=ans.strip(), source="gemini")
+        return QuestionAnswer(
+            text=_fallback_answer(body, q, reason="api_error"),
+            source="fallback",
+        )
     except Exception:
         logger.exception("Gemini Q&A failed; using fallback answer.")
-        return _fallback_answer(body, q, reason="api_error")
+        return QuestionAnswer(
+            text=_fallback_answer(body, q, reason="api_error"),
+            source="fallback",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +416,7 @@ def _normalize_full_payload(data: dict[str, Any], document_body: str) -> dict[st
         summary = _fallback_full(document_body)["summary"]
 
     kps = data.get("key_points")
-    key_points = _normalize_string_list(kps, max_items=20)
+    key_points = _normalize_string_list(kps, max_items=8)
     if not key_points:
         key_points = _fallback_full(document_body)["key_points"]
 

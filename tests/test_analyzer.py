@@ -101,15 +101,67 @@ def test_document_analyzer_single_full_call(monkeypatch):
 
 
 def test_answer_question_empty_string():
-    assert "empty" in answer_question("some doc", "   ").lower()
+    out = answer_question("some doc", "   ")
+    assert "empty" in out.text.lower()
+    assert out.source == "fallback"
 
 
 def test_answer_question_fallback_no_key(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     with patch("backend.services.ai_analyzer._reload_dotenv", lambda: None):
-        ans = answer_question(SAMPLE_MARKETING, "What is the total budget?")
-    assert "GEMINI_API_KEY" in ans or "unavailable" in ans.lower()
+        out = answer_question(SAMPLE_MARKETING, "What is the total budget?")
+    assert "GEMINI_API_KEY" in out.text or "unavailable" in out.text.lower()
+    assert out.source == "fallback"
+
+
+def test_answer_question_includes_followup_context_in_prompt(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    prompts: list[str] = []
+
+    def capture_invoke(prompt: str) -> str:
+        prompts.append(prompt)
+        return json.dumps({"answer": "Acknowledged."})
+
+    insights = {
+        "summary": "Quarterly marketing plan.",
+        "key_points": ["Budget $150k", "Launch in Q2"],
+        "entities": {"dates": ["Q2 2026"]},
+    }
+    conversation = [{"question": "What is the budget?", "answer": "$150,000 per the proposal."}]
+
+    with patch("backend.services.ai_analyzer._invoke_gemini", side_effect=capture_invoke):
+        out = answer_question(
+            SAMPLE_MARKETING,
+            "Can you elaborate on the second key point?",
+            insights=insights,
+            conversation=conversation,
+        )
+
+    assert out.text == "Acknowledged."
+    assert out.source == "gemini"
+    assert len(prompts) == 1
+    p0 = prompts[0]
+    assert "PRIOR ANALYSIS" in p0
+    assert "PRIOR Q&A" in p0
+    assert "Budget $150k" in p0
+    assert "What is the budget?" in p0
+    assert "elaborate on the second key point" in p0
+
+
+def test_answer_question_filler_skips_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    called = {"n": 0}
+
+    def fail_invoke(_prompt: str) -> str:
+        called["n"] += 1
+        raise AssertionError("model should not run for filler")
+
+    with patch("backend.services.ai_analyzer._invoke_gemini", side_effect=fail_invoke):
+        out = answer_question(SAMPLE_MARKETING, "hmmm.")
+    assert called["n"] == 0
+    assert "not sure" in out.text.lower() or "specific" in out.text.lower()
+    assert out.source == "fallback"
 
 
 def test_generate_summary_delegates_to_full_mock(monkeypatch):

@@ -202,7 +202,9 @@ curl -X POST http://localhost:8000/api/analyze \
 
 ### `POST /api/ask`
 
-Answer a natural-language question using only the text of a previously uploaded file.
+Answer a natural-language question using the uploaded document. The model is instructed to ground facts in the document text.
+
+Optional **`insights`** (from `POST /api/analyze`) and **`conversation`** (prior Q&A turns) help with follow-ups—e.g. “expand on point 2”, “what you said about the budget”—while still requiring support from the document when stating facts.
 
 **Request** (`application/json`)
 
@@ -210,9 +212,19 @@ Answer a natural-language question using only the text of a previously uploaded 
 {
   "file_id": "f7d3a8e2-9c11-4b6d-9a87-1c4f2e6b8a31",
   "file_ext": ".pdf",
-  "question": "What is the total budget?"
+  "question": "What is the total budget?",
+  "insights": {
+    "summary": "…",
+    "key_points": ["…", "…"],
+    "entities": { "monetary_values": [], "dates": [], "organizations": [], "key_metrics": [] }
+  },
+  "conversation": [
+    { "question": "Who is the client?", "answer": "…" }
+  ]
 }
 ```
+
+`insights` and `conversation` may be omitted. The web UI sends them automatically after analysis and accumulates `conversation` across turns (last 10 on the server).
 
 **Success — `200 OK`**
 
@@ -223,6 +235,8 @@ Answer a natural-language question using only the text of a previously uploaded 
   "analysis_source": "gemini"
 }
 ```
+
+`analysis_source` here reflects **this answer** (`gemini` or `fallback`), not a re-run of full document analysis.
 
 | Status | When |
 |-------:|------|
