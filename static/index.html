@@ -95,10 +95,116 @@
     .btn-ghost:hover:not(:disabled) { background: #e5e7eb; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    #progress-wrap { display: none; margin-top: 0.9rem; }
-    #progress-bar-track { background: #e5e7eb; border-radius: 999px; height: 7px; overflow: hidden; }
-    #progress-bar-fill { background: #2563eb; height: 100%; width: 0%; transition: width .2s; }
-    #progress-label { font-size: 0.72rem; color: #6b7280; margin-top: 0.25rem; }
+    #progress-wrap {
+      display: none;
+      margin-top: 1rem;
+      padding: 1rem 1.1rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+    }
+    #progress-wrap.visible { display: block; }
+
+    .processing-header {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .processing-spinner {
+      width: 22px;
+      height: 22px;
+      border: 3px solid #dbeafe;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: spin 0.75s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #progress-status {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #1e40af;
+    }
+
+    .processing-steps {
+      list-style: none;
+      margin: 0 0 0.85rem;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .processing-steps li {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      padding-left: 1.35rem;
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .processing-steps li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.35rem;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      background: #e2e8f0;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    .processing-steps li.active {
+      color: #1e40af;
+      font-weight: 600;
+    }
+
+    .processing-steps li.active::before {
+      background: #2563eb;
+      box-shadow: 0 0 0 3px #dbeafe;
+    }
+
+    .processing-steps li.done {
+      color: #059669;
+    }
+
+    .processing-steps li.done::before {
+      background: #10b981;
+      box-shadow: none;
+    }
+
+  #progress-bar-track {
+      background: #e5e7eb;
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #progress-bar-track.indeterminate #progress-bar-fill {
+      width: 35% !important;
+      animation: progress-slide 1.4s ease-in-out infinite;
+    }
+
+    @keyframes progress-slide {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(320%); }
+    }
+
+    #progress-bar-fill {
+      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      transition: width 0.25s ease;
+    }
 
     .panel {
       display: none;
@@ -122,6 +228,22 @@
       gap: 0.5rem;
       align-items: center;
       margin-bottom: 1.25rem;
+    }
+    .badge-row.dashboard-toolbar {
+      justify-content: space-between;
+      width: 100%;
+    }
+    .export-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .export-actions .btn {
+      flex: 0 0 auto;
+      min-width: auto;
+      padding: 0.5rem 0.85rem;
+      font-size: 0.8rem;
     }
     .badge {
       font-size: 0.68rem;
@@ -291,9 +413,17 @@
         <button type="button" class="btn btn-secondary" id="analyze-btn" disabled>Analyze</button>
       </div>
 
-      <div id="progress-wrap">
+      <div id="progress-wrap" aria-live="polite">
+        <div class="processing-header">
+          <div class="processing-spinner" id="processing-spinner" aria-hidden="true"></div>
+          <div id="progress-status">Uploading document...</div>
+        </div>
+        <ol class="processing-steps" id="processing-steps">
+          <li data-step="0">Uploading document...</li>
+          <li data-step="1">Analyzing content...</li>
+          <li data-step="2">Extracting insights...</li>
+        </ol>
         <div id="progress-bar-track"><div id="progress-bar-fill"></div></div>
-        <div id="progress-label"></div>
       </div>
 
       <div class="panel" id="upload-result"></div>
@@ -321,7 +451,15 @@
     const analyzeBtn = document.getElementById('analyze-btn');
     const progressWrap = document.getElementById('progress-wrap');
     const progressFill = document.getElementById('progress-bar-fill');
-    const progressLabel = document.getElementById('progress-label');
+    const progressBarTrack = document.getElementById('progress-bar-track');
+    const progressStatus = document.getElementById('progress-status');
+    const processingSteps = document.getElementById('processing-steps');
+    const PROCESS_STEP_LABELS = [
+      'Uploading document...',
+      'Analyzing content...',
+      'Extracting insights...',
+    ];
+    let analyzeStepTimer = null;
     const uploadResult = document.getElementById('upload-result');
     const resultsDashboard = document.getElementById('results-dashboard');
 
@@ -331,7 +469,7 @@
     let uploadedFileId = null;
     let uploadedFileExt = null;
     let lastAnalysis = null;
-    let qaHistory = [];
+    let uploadedOriginalName = '';
 
     function formatBytes(bytes) {
       if (bytes < 1024) return bytes + ' B';
@@ -352,6 +490,76 @@
         .replace(/"/g, '&quot;');
     }
 
+    function parseFilenameFromContentDisposition(cd) {
+      if (!cd) return '';
+      var star = /filename\*=UTF-8''([^;\n]+)/i.exec(cd);
+      if (star) {
+        try { return decodeURIComponent(star[1].trim()); } catch (e) { /* ignore */ }
+      }
+      var quoted = /filename="([^"]+)"/i.exec(cd);
+      if (quoted) return quoted[1];
+      return '';
+    }
+
+    function downloadBlob(blob, filename) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    async function exportReport(kind) {
+      if (!lastAnalysis) return;
+      var pdfBtn = document.getElementById('export-pdf');
+      var docxBtn = document.getElementById('export-docx');
+      var active = kind === 'pdf' ? pdfBtn : docxBtn;
+      if (active && active.disabled) return;
+      if (pdfBtn) pdfBtn.disabled = true;
+      if (docxBtn) docxBtn.disabled = true;
+      try {
+        var analyzedAt = new Date().toISOString();
+        var docName = uploadedOriginalName || ('document' + (uploadedFileExt || ''));
+        var body = {
+          document_name: docName,
+          analyzed_at: analyzedAt,
+          summary: lastAnalysis.summary || '',
+          key_points: Array.isArray(lastAnalysis.key_points) ? lastAnalysis.key_points : [],
+          entities: (lastAnalysis.entities && typeof lastAnalysis.entities === 'object')
+            ? lastAnalysis.entities
+            : {},
+          analysis_source: lastAnalysis.analysis_source || null,
+        };
+        var path = kind === 'pdf' ? '/api/export/pdf' : '/api/export/docx';
+        var res = await fetch(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        var fn = parseFilenameFromContentDisposition(res.headers.get('Content-Disposition'));
+        if (!fn) fn = kind === 'pdf' ? 'Analysis_Report.pdf' : 'Analysis_Report.docx';
+        var blob = await res.blob();
+        if (!res.ok) {
+          var errText = await blob.text().catch(function () { return ''; });
+          try {
+            var j = JSON.parse(errText);
+            if (j.detail) errText = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+          } catch (e) { /* use raw */ }
+          alert('Export failed: ' + (errText || res.statusText));
+          return;
+        }
+        downloadBlob(blob, fn);
+      } catch (e) {
+        alert('Export failed: ' + e.message);
+      } finally {
+        if (pdfBtn) pdfBtn.disabled = false;
+        if (docxBtn) docxBtn.disabled = false;
+      }
+    }
+
     function setFile(file) {
       selectedFile = file;
       const ext = file.name.split('.').pop().toLowerCase();
@@ -365,6 +573,7 @@
       analyzeBtn.disabled = true;
       lastAnalysis = null;
       qaHistory = [];
+      uploadedOriginalName = '';
       hideUploadResult();
       resultsDashboard.classList.remove('visible');
       resultsDashboard.innerHTML = '';
@@ -381,6 +590,7 @@
       uploadedFileExt = null;
       lastAnalysis = null;
       qaHistory = [];
+      uploadedOriginalName = '';
       hideUploadResult();
       resultsDashboard.classList.remove('visible');
       resultsDashboard.innerHTML = '';
@@ -392,10 +602,47 @@
       uploadResult.innerHTML = '';
     }
 
+    function setProcessingStep(activeIndex, pct) {
+      if (!processingSteps) return;
+      var items = processingSteps.querySelectorAll('li');
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.remove('active', 'done');
+        if (i < activeIndex) items[i].classList.add('done');
+        else if (i === activeIndex) items[i].classList.add('active');
+      }
+      if (progressStatus && PROCESS_STEP_LABELS[activeIndex]) {
+        progressStatus.textContent = PROCESS_STEP_LABELS[activeIndex];
+      }
+      if (progressBarTrack) {
+        if (pct == null) {
+          progressBarTrack.classList.add('indeterminate');
+          progressFill.style.width = '35%';
+        } else {
+          progressBarTrack.classList.remove('indeterminate');
+          progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+        }
+      }
+    }
+
+    function showProgress() {
+      progressWrap.classList.add('visible');
+      progressWrap.style.display = 'block';
+    }
+
     function clearProgress() {
+      if (analyzeStepTimer) {
+        clearTimeout(analyzeStepTimer);
+        analyzeStepTimer = null;
+      }
+      progressWrap.classList.remove('visible');
       progressWrap.style.display = 'none';
       progressFill.style.width = '0%';
-      progressLabel.textContent = '';
+      if (progressBarTrack) progressBarTrack.classList.remove('indeterminate');
+      if (processingSteps) {
+        processingSteps.querySelectorAll('li').forEach(function (li) {
+          li.classList.remove('active', 'done');
+        });
+      }
     }
 
     function showUploadMessage(type, html) {
@@ -439,8 +686,12 @@
 
       resultsDashboard.innerHTML =
         '<div class="card">' +
-          '<div class="badge-row">' +
+          '<div class="badge-row dashboard-toolbar">' +
             '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
+            '<div class="export-actions">' +
+              '<button type="button" class="btn btn-ghost" id="export-pdf">Export PDF</button>' +
+              '<button type="button" class="btn btn-ghost" id="export-docx">Export DOCX</button>' +
+            '</div>' +
           '</div>' +
           '<div class="section">' +
             '<div class="section-heading">Executive summary</div>' +
@@ -474,6 +725,8 @@
       resultsDashboard.classList.add('visible');
 
       document.getElementById('qa-submit').addEventListener('click', submitQuestion);
+      document.getElementById('export-pdf').addEventListener('click', function () { exportReport('pdf'); });
+      document.getElementById('export-docx').addEventListener('click', function () { exportReport('docx'); });
       const qaInputEl = document.getElementById('qa-input');
       if (qaInputEl) {
         qaInputEl.addEventListener('keydown', function (e) {
@@ -564,7 +817,8 @@
       if (!selectedFile) return;
       uploadBtn.disabled = true;
       analyzeBtn.disabled = true;
-      progressWrap.style.display = 'block';
+      showProgress();
+      setProcessingStep(0, 5);
       hideUploadResult();
       resultsDashboard.classList.remove('visible');
       resultsDashboard.innerHTML = '';
@@ -578,8 +832,7 @@
           x.upload.addEventListener('progress', function (e) {
             if (e.lengthComputable) {
               const pct = Math.round((e.loaded / e.total) * 100);
-              progressFill.style.width = pct + '%';
-              progressLabel.textContent = 'Uploading… ' + pct + '%';
+              setProcessingStep(0, pct);
             }
           });
           x.addEventListener('load', function () { resolve(x); });
@@ -587,13 +840,14 @@
           x.open('POST', '/api/upload');
           x.send(formData);
         });
-        progressFill.style.width = '100%';
+        setProcessingStep(0, 100);
         let data = {};
         try { data = JSON.parse(xhr.responseText); } catch (_) {}
 
         if (xhr.status === 200) {
           uploadedFileId = data.file_id;
           uploadedFileExt = data.file_ext || fileExtension(selectedFile.name);
+          uploadedOriginalName = selectedFile ? selectedFile.name : '';
           analyzeBtn.disabled = !uploadedFileId;
           showUploadMessage('success',
             '<h2>Upload complete</h2><p>File ID: <span class="file-id">' + escapeHtml(uploadedFileId) + '</span></p>' +
@@ -601,17 +855,19 @@
         } else {
           uploadedFileId = null;
           uploadedFileExt = null;
+          uploadedOriginalName = '';
           const detail = typeof data.detail === 'string' ? data.detail : (xhr.statusText || 'Unknown error');
           showUploadMessage('error', '<h2>Upload failed</h2><p>' + escapeHtml(String(detail)) + '</p>');
         }
       } catch (err) {
         uploadedFileId = null;
         uploadedFileExt = null;
+        uploadedOriginalName = '';
         showUploadMessage('error', '<h2>Upload failed</h2><p>' + escapeHtml(err.message) + '</p>');
       } finally {
         uploadBtn.disabled = false;
         analyzeBtn.disabled = !uploadedFileId;
-        progressLabel.textContent = 'Done';
+        setTimeout(clearProgress, 400);
       }
     });
 
@@ -619,9 +875,11 @@
       if (!uploadedFileId || !uploadedFileExt) return;
       analyzeBtn.disabled = true;
       uploadBtn.disabled = true;
-      progressWrap.style.display = 'block';
-      progressFill.style.width = '10%';
-      progressLabel.textContent = 'Extracting & analyzing…';
+      showProgress();
+      setProcessingStep(1, null);
+      analyzeStepTimer = setTimeout(function () {
+        setProcessingStep(2, null);
+      }, 1800);
 
       try {
         const res = await fetch('/api/analyze', {
@@ -630,7 +888,11 @@
           body: JSON.stringify({ file_id: uploadedFileId, file_ext: uploadedFileExt }),
         });
         const data = await res.json().catch(function () { return {}; });
-        progressFill.style.width = '100%';
+        if (analyzeStepTimer) {
+          clearTimeout(analyzeStepTimer);
+          analyzeStepTimer = null;
+        }
+        setProcessingStep(2, 100);
 
         if (!res.ok) {
           const detail = typeof data.detail === 'string' ? data.detail : res.statusText;
@@ -649,8 +911,7 @@
       } finally {
         analyzeBtn.disabled = false;
         uploadBtn.disabled = false;
-        progressLabel.textContent = 'Done';
-        setTimeout(clearProgress, 500);
+        setTimeout(clearProgress, 600);
       }
     });
   </script>

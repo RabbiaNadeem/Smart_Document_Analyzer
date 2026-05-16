@@ -246,6 +246,41 @@ Optional **`insights`** (from `POST /api/analyze`) and **`conversation`** (prior
 
 ---
 
+### `POST /api/export/pdf` and `POST /api/export/docx`
+
+Download a formatted analysis report (same sections as the dashboard: summary, key points, entities) with **original document name**, **analysis timestamp**, and optional **analysis source**.
+
+**Request** (`application/json`) — typically the fields you already have from `POST /api/analyze`, plus the filename the user uploaded:
+
+```json
+{
+  "document_name": "MyFile.pdf",
+  "analyzed_at": "2026-05-11T14:30:00.000Z",
+  "summary": "…",
+  "key_points": ["…"],
+  "entities": {
+    "monetary_values": [],
+    "dates": [],
+    "organizations": [],
+    "key_metrics": []
+  },
+  "analysis_source": "gemini"
+}
+```
+
+`analyzed_at` is optional (server uses current UTC if omitted). Responses are binary files with `Content-Disposition: attachment` for browser download. The web UI sends this payload when you click **Export PDF** or **Export DOCX** on the results card.
+
+**PDF dependency:** use **`fpdf2`** (listed in `requirements.txt`), not the legacy PyPI package `fpdf` 1.7.x. If export returns 503 or the server log shows `unexpected keyword argument 'new_x'`, run:
+
+```bash
+pip uninstall fpdf -y
+pip install fpdf2
+```
+
+Use your project **venv** (`venv\Scripts\python.exe -m pip install -r requirements.txt`) and restart uvicorn from the activated venv.
+
+---
+
 ## Project structure
 
 ```
@@ -260,16 +295,17 @@ document_analyzer/
 │   └── index.html                # Drag-and-drop UI
 ├── backend/
 │   ├── api/
-│   │   └── endpoints.py          # /api/upload, /api/analyze, /api/ask
+│   │   └── endpoints.py          # /api/upload, /analyze, /ask, /export/*
 │   ├── services/
 │   │   ├── supabase_service.py   # Upload / download to Supabase Storage
 │   │   ├── document_processor.py # Text extraction (path + bytes APIs)
 │   │   ├── ai_analyzer.py        # Gemini prompts + JSON + fallbacks
+│   │   ├── analysis_export.py    # PDF (fpdf2) + DOCX export builders
 │   │   └── document_analyzer.py  # Facade over ai_analyzer (cached full run)
 │   └── utils/
 └── tests/
     ├── test_document_processor.py
-    ├── test_analyzer.py
+    ├── test_analysis_export.py
     ├── sample_docs/              # e.g. marketing_proposal.txt
     └── sample_files/             # sample.pdf / .docx / .txt / .csv
 ```
