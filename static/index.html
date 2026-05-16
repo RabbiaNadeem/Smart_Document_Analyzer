@@ -331,6 +331,7 @@
     let uploadedFileId = null;
     let uploadedFileExt = null;
     let lastAnalysis = null;
+    let qaHistory = [];
 
     function formatBytes(bytes) {
       if (bytes < 1024) return bytes + ' B';
@@ -363,6 +364,7 @@
       uploadedFileExt = null;
       analyzeBtn.disabled = true;
       lastAnalysis = null;
+      qaHistory = [];
       hideUploadResult();
       resultsDashboard.classList.remove('visible');
       resultsDashboard.innerHTML = '';
@@ -378,6 +380,7 @@
       uploadedFileId = null;
       uploadedFileExt = null;
       lastAnalysis = null;
+      qaHistory = [];
       hideUploadResult();
       resultsDashboard.classList.remove('visible');
       resultsDashboard.innerHTML = '';
@@ -412,6 +415,7 @@
     }
 
     function renderDashboard(data) {
+      qaHistory = [];
       lastAnalysis = data;
       const src = data.analysis_source === 'gemini' ? 'gemini' : 'fallback';
       const badgeClass = src === 'gemini' ? 'badge-gemini' : 'badge-fallback';
@@ -458,7 +462,7 @@
           '</div>' +
           '<div class="section">' +
             '<div class="section-heading qa">Ask questions</div>' +
-            '<p class="meta-hint" style="margin-bottom:0.5rem">Ask in natural language. Answers use only this document.</p>' +
+            '<p class="meta-hint" style="margin-bottom:0.5rem">Ask in natural language. Answers are grounded in the document; after analysis, follow-ups can refer to the summary, key points, or your earlier questions. Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</p>' +
             '<div class="qa-box">' +
               '<textarea id="qa-input" placeholder="e.g. What is the total budget?"></textarea>' +
               '<button type="button" class="btn btn-primary" id="qa-submit" style="max-width:220px">Ask</button>' +
@@ -470,6 +474,15 @@
       resultsDashboard.classList.add('visible');
 
       document.getElementById('qa-submit').addEventListener('click', submitQuestion);
+      const qaInputEl = document.getElementById('qa-input');
+      if (qaInputEl) {
+        qaInputEl.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitQuestion();
+          }
+        });
+      }
     }
 
     async function submitQuestion() {
@@ -479,20 +492,34 @@
       if (!q || !uploadedFileId || !uploadedFileExt) return;
 
       const btn = document.getElementById('qa-submit');
+      if (!btn || btn.disabled) return;
       btn.disabled = true;
       try {
-        const res = await fetch('/api/ask', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const body = {
             file_id: uploadedFileId,
             file_ext: uploadedFileExt,
             question: q,
-          }),
+            conversation: qaHistory.length ? qaHistory.slice() : undefined,
+          };
+        if (lastAnalysis && (lastAnalysis.summary || (lastAnalysis.key_points && lastAnalysis.key_points.length))) {
+          body.insights = {
+            summary: lastAnalysis.summary || '',
+            key_points: lastAnalysis.key_points || [],
+            entities: lastAnalysis.entities || {},
+          };
+        }
+
+        const res = await fetch('/api/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
         });
         const payload = await res.json().catch(function () { return {}; });
         const detail = typeof payload.detail === 'string' ? payload.detail : res.statusText;
         const answer = res.ok ? (payload.answer || '') : ('Error: ' + detail);
+        if (res.ok && answer) {
+          qaHistory.push({ question: q, answer: answer });
+        }
         const turn = document.createElement('div');
         turn.className = 'qa-turn';
         turn.innerHTML =

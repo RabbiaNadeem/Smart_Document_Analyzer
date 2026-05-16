@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from backend.services import ai_analyzer
 
 
@@ -35,5 +37,16 @@ class DocumentAnalyzer:
         """``gemini`` or ``fallback`` (no key / model error)."""
         return self._analysis().source
 
-    def answer_question(self, question: str) -> str:
-        return ai_analyzer.answer_question(self._text, question)
+    def answer_question(
+        self,
+        question: str,
+        *,
+        insights: dict[str, Any] | None = None,
+        conversation: list[dict[str, str]] | None = None,
+    ) -> ai_analyzer.QuestionAnswer:
+        return ai_analyzer.answer_question(
+            self._text,
+            question,
+            insights=insights,
+            conversation=conversation,
+        )

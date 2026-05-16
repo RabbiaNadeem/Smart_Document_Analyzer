@@ -180,10 +180,25 @@ async def analyze_document(request: AnalyzeRequest) -> dict:
 # ---------------------------------------------------------------------------
 
 
+class QATurn(BaseModel):
+    question: str
+    answer: str
+
+
+class AnalysisInsightsPayload(BaseModel):
+    """Prior analysis from ``POST /api/analyze`` — improves follow-up Q&A."""
+
+    summary: str | None = None
+    key_points: list[str] | None = None
+    entities: dict[str, list[str]] | None = None
+
+
 class AskRequest(BaseModel):
     file_id: str
     file_ext: str
     question: str
+    insights: AnalysisInsightsPayload | None = None
+    conversation: list[QATurn] | None = None
 
 
 @router.post("/ask")
@@ -216,11 +231,24 @@ async def ask_document(request: AskRequest) -> dict:
             raise HTTPException(status_code=422, detail=str(exc))
 
         analyzer = DocumentAnalyzer(text)
-        answer = analyzer.answer_question(q)
+        insights_dict: dict | None = None
+        if request.insights is not None:
+            raw = request.insights.model_dump(exclude_none=True)
+            insights_dict = raw if raw else None
+
+        conv: list[dict[str, str]] | None = None
+        if request.conversation:
+            conv = [t.model_dump() for t in request.conversation]
+
+        result = analyzer.answer_question(
+            q,
+            insights=insights_dict,
+            conversation=conv,
+        )
         return {
-            "answer": answer,
+            "answer": result.text,
             "document_id": request.file_id,
-            "analysis_source": analyzer.analysis_source(),
+            "analysis_source": result.source,
         }
 
     except HTTPException:
