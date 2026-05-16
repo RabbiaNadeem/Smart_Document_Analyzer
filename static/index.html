@@ -3,917 +3,121 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Document Analyzer — Results</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: #eef1f6;
-      min-height: 100vh;
-      padding: 1.5rem 1rem 3rem;
-      color: #1f2937;
-    }
-
-    .page {
-      max-width: 960px;
-      margin: 0 auto;
-    }
-
-    h1.page-title {
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 0.35rem;
-    }
-
-    .page-lead {
-      font-size: 0.9rem;
-      color: #6b7280;
-      margin-bottom: 1.5rem;
-    }
-
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
-      padding: 1.75rem 2rem;
-      margin-bottom: 1.25rem;
-    }
-
-    .drop-zone {
-      border: 2px dashed #c3c8d4;
-      border-radius: 10px;
-      padding: 2rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s, background .2s;
-    }
-
-    .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; }
-    .drop-zone input[type="file"] { display: none; }
-    .drop-zone .icon { font-size: 2.25rem; margin-bottom: 0.6rem; }
-    .drop-zone p { color: #6b7280; font-size: 0.9rem; }
-    .drop-zone .browse { color: #2563eb; font-weight: 600; text-decoration: underline; cursor: pointer; }
-    .allowed-types { font-size: 0.72rem; color: #9ca3af; margin-top: 0.35rem; }
-
-    #file-preview {
-      display: none;
-      align-items: center;
-      gap: 0.75rem;
-      margin-top: 1rem;
-      padding: 0.65rem 0.9rem;
-      background: #f9fafb;
-      border-radius: 8px;
-      border: 1px solid #e5e7eb;
-    }
-    #file-preview .file-icon { font-size: 1.5rem; }
-    #file-preview .file-info { flex: 1; min-width: 0; }
-    #file-preview .file-name { font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #file-preview .file-size { font-size: 0.72rem; color: #6b7280; }
-    #remove-btn { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 1rem; padding: 0.2rem; }
-    #remove-btn:hover { color: #ef4444; }
-
-    .actions { display: flex; gap: 0.65rem; margin-top: 1.25rem; flex-wrap: wrap; }
-
-    .btn {
-      flex: 1;
-      min-width: 120px;
-      padding: 0.65rem 1rem;
-      font-size: 0.95rem;
-      font-weight: 600;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background .2s, opacity .2s;
-    }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
-    .btn-secondary { background: #e0e7ff; color: #312e81; }
-    .btn-secondary:hover:not(:disabled) { background: #c7d2fe; }
-    .btn-ghost { background: #f3f4f6; color: #374151; }
-    .btn-ghost:hover:not(:disabled) { background: #e5e7eb; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    #progress-wrap {
-      display: none;
-      margin-top: 1rem;
-      padding: 1rem 1.1rem;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-    }
-    #progress-wrap.visible { display: block; }
-
-    .processing-header {
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      margin-bottom: 0.85rem;
-    }
-
-    .processing-spinner {
-      width: 22px;
-      height: 22px;
-      border: 3px solid #dbeafe;
-      border-top-color: #2563eb;
-      border-radius: 50%;
-      flex-shrink: 0;
-      animation: spin 0.75s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    #progress-status {
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: #1e40af;
-    }
-
-    .processing-steps {
-      list-style: none;
-      margin: 0 0 0.85rem;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-    }
-
-    .processing-steps li {
-      font-size: 0.8rem;
-      color: #94a3b8;
-      padding-left: 1.35rem;
-      position: relative;
-      transition: color 0.2s;
-    }
-
-    .processing-steps li::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0.35rem;
-      width: 0.55rem;
-      height: 0.55rem;
-      border-radius: 50%;
-      background: #e2e8f0;
-      transition: background 0.2s, box-shadow 0.2s;
-    }
-
-    .processing-steps li.active {
-      color: #1e40af;
-      font-weight: 600;
-    }
-
-    .processing-steps li.active::before {
-      background: #2563eb;
-      box-shadow: 0 0 0 3px #dbeafe;
-    }
-
-    .processing-steps li.done {
-      color: #059669;
-    }
-
-    .processing-steps li.done::before {
-      background: #10b981;
-      box-shadow: none;
-    }
-
-  #progress-bar-track {
-      background: #e5e7eb;
-      border-radius: 999px;
-      height: 8px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    #progress-bar-track.indeterminate #progress-bar-fill {
-      width: 35% !important;
-      animation: progress-slide 1.4s ease-in-out infinite;
-    }
-
-    @keyframes progress-slide {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(320%); }
-    }
-
-    #progress-bar-fill {
-      background: linear-gradient(90deg, #3b82f6, #2563eb);
-      height: 100%;
-      width: 0%;
-      border-radius: 999px;
-      transition: width 0.25s ease;
-    }
-
-    .panel {
-      display: none;
-      margin-top: 1rem;
-      padding: 1rem 1.1rem;
-      border-radius: 8px;
-      font-size: 0.88rem;
-    }
-    .panel.visible { display: block; }
-    .panel.success { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
-    .panel.error { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
-    .panel h2 { font-size: 0.9rem; margin-bottom: 0.35rem; }
-    .file-id { font-family: ui-monospace, monospace; word-break: break-all; font-size: 0.78rem; }
-
-    #results-dashboard { display: none; }
-    #results-dashboard.visible { display: block; }
-
-    .badge-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
-      margin-bottom: 1.25rem;
-    }
-    .badge-row.dashboard-toolbar {
-      justify-content: space-between;
-      width: 100%;
-    }
-    .export-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .export-actions .btn {
-      flex: 0 0 auto;
-      min-width: auto;
-      padding: 0.5rem 0.85rem;
-      font-size: 0.8rem;
-    }
-    .badge {
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 0.25rem 0.55rem;
-      border-radius: 999px;
-    }
-    .badge-gemini { background: #dbeafe; color: #1e40af; }
-    .badge-fallback { background: #fef3c7; color: #92400e; }
-
-    .section {
-      margin-bottom: 1.75rem;
-    }
-    .section:last-child { margin-bottom: 0; }
-
-    .section-heading {
-      font-size: 0.78rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #64748b;
-      margin-bottom: 0.55rem;
-      border-bottom: 2px solid #e2e8f0;
-      padding-bottom: 0.35rem;
-    }
-
-    .section-heading.qa {
-      color: #1d4ed8;
-      border-bottom-color: #bfdbfe;
-    }
-
-    .exec-summary {
-      font-size: 0.95rem;
-      line-height: 1.65;
-      color: #334155;
-    }
-
-    .key-points ul {
-      margin-left: 1.2rem;
-      color: #334155;
-      font-size: 0.9rem;
-      line-height: 1.55;
-    }
-    .key-points li { margin-bottom: 0.35rem; }
-
-    .entity-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 0.65rem;
-    }
-
-    .entity-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 0.75rem 0.85rem;
-      font-size: 0.82rem;
-    }
-    .entity-card h4 {
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: #475569;
-      margin-bottom: 0.4rem;
-    }
-    .entity-card ul {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-    }
-    .entity-card li {
-      padding: 0.2rem 0;
-      border-bottom: 1px solid #e2e8f0;
-      color: #1e293b;
-    }
-    .entity-card li:last-child { border-bottom: none; }
-    .entity-card .empty { color: #94a3b8; font-style: italic; }
-
-    details.source-text {
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    details.source-text summary {
-      cursor: pointer;
-      padding: 0.65rem 0.85rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-      background: #f1f5f9;
-      color: #475569;
-    }
-    details.source-text pre {
-      margin: 0;
-      padding: 0.75rem 0.85rem;
-      font-size: 0.72rem;
-      line-height: 1.45;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 260px;
-      overflow: auto;
-      background: #fff;
-      color: #334155;
-    }
-
-    .qa-box {
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-    }
-    .qa-box textarea {
-      width: 100%;
-      min-height: 72px;
-      padding: 0.65rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid #cbd5e1;
-      font-family: inherit;
-      font-size: 0.88rem;
-      resize: vertical;
-    }
-    .qa-box textarea:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-    #qa-log {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-    .qa-turn {
-      border-left: 3px solid #2563eb;
-      padding: 0.5rem 0 0.5rem 0.85rem;
-      background: #f8fafc;
-      border-radius: 0 8px 8px 0;
-    }
-    .qa-turn .q { font-size: 0.78rem; font-weight: 700; color: #64748b; margin-bottom: 0.25rem; }
-    .qa-turn .a { font-size: 0.88rem; color: #1e293b; line-height: 1.5; }
-
-    .meta-hint { font-size: 0.7rem; color: #94a3b8; margin-top: 0.35rem; }
-  </style>
+  <title>Document Analyzer</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
-  <div class="page">
-    <h1 class="page-title">Document Analyzer</h1>
-    <p class="page-lead">Upload a document, run analysis for an executive summary and structured entities, then ask follow-up questions.</p>
+  <div class="app-shell">
+    <main class="panel-left">
+      <h1 class="page-title">Document Analyzer</h1>
+      <p class="page-subtitle">Upload a document, review AI insights, and ask follow-up questions.</p>
 
-    <div class="card">
-      <div class="drop-zone" id="drop-zone">
-        <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv" />
-        <div class="icon">📄</div>
-        <p>Drag &amp; drop here, or <span class="browse" id="browse-btn">browse</span></p>
-        <p class="allowed-types">PDF, DOCX, TXT, CSV · max 10 MB</p>
-      </div>
-
-      <div id="file-preview">
-        <span class="file-icon" id="file-type-icon">📄</span>
-        <div class="file-info">
-          <div class="file-name" id="file-name-display"></div>
-          <div class="file-size" id="file-size-display"></div>
+      <nav class="step-tracker" aria-label="Progress">
+        
+        <div class="step-item" id="step-upload" data-step="upload">
+          <span class="circle" aria-hidden="true"></span>
+          <span>Upload</span>
         </div>
-        <button type="button" id="remove-btn" title="Remove">✕</button>
-      </div>
+        <span class="step-line" aria-hidden="true"></span>
+        <div class="step-item" id="step-analyze" data-step="analyze">
+          <span class="circle" aria-hidden="true"></span>
+          <span>Analyze</span>
+        </div>
+        <span class="step-line" aria-hidden="true"></span>
+        <div class="step-item" id="step-ask" data-step="ask">
+          <span class="circle" aria-hidden="true"></span>
+          <span>Ask Questions</span>
+        </div>
+      </nav>
 
-      <div class="actions">
-        <button type="button" class="btn btn-primary" id="upload-btn" disabled>Upload</button>
-        <button type="button" class="btn btn-secondary" id="analyze-btn" disabled>Analyze</button>
-      </div>
+      <section class="card upload-card" id="upload-card">
+        <div id="upload-empty">
+          <div class="drop-zone" id="drop-zone">
+            <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv" />
+            <p>Drag &amp; drop a file here, or <strong>browse</strong></p>
+            <p style="font-size:0.72rem;margin-top:0.35rem">PDF, DOCX, TXT, CSV · max 10 MB</p>
+          </div>
+        </div>
+        <div class="upload-row" id="upload-row">
+          <div class="file-icon-box" id="file-icon-label">PDF</div>
+          <div class="upload-info">
+            <div class="upload-filename" id="upload-filename">document.pdf</div>
+            <div class="upload-meta" id="upload-meta">Uploaded</div>
+          </div>
+          <div class="upload-actions">
+            <button type="button" class="btn btn-ghost" id="btn-replace">Replace</button>
+            <button type="button" class="btn" id="btn-reanalyze">Re-analyze</button>
+          </div>
+        </div>
+      </section>
 
       <div id="progress-wrap" aria-live="polite">
         <div class="processing-header">
-          <div class="processing-spinner" id="processing-spinner" aria-hidden="true"></div>
+          <div class="processing-spinner" aria-hidden="true"></div>
           <div id="progress-status">Uploading document...</div>
         </div>
         <ol class="processing-steps" id="processing-steps">
-          <li data-step="0">Uploading document...</li>
-          <li data-step="1">Analyzing content...</li>
-          <li data-step="2">Extracting insights...</li>
+          <li>Uploading document...</li>
+          <li>Analyzing content...</li>
+          <li>Extracting insights...</li>
         </ol>
         <div id="progress-bar-track"><div id="progress-bar-fill"></div></div>
       </div>
 
-      <div class="panel" id="upload-result"></div>
-    </div>
+      <section class="card analysis-card" id="analysis-card">
+        <div class="analysis-body" id="analysis-body">
+          <div class="analysis-header">
+            <span class="ai-badge purple" id="ai-badge">AI · Gemini</span>
+            <div class="export-actions">
+              <button type="button" class="btn btn-ghost" id="export-pdf">Export PDF</button>
+              <button type="button" class="btn btn-ghost" id="export-docx">Export DOCX</button>
+            </div>
+          </div>
 
-    <div id="results-dashboard"></div>
+          <p class="section-label">Executive Summary</p>
+          <p class="summary-text" id="summary-text"></p>
+
+          <div class="divider"></div>
+
+          <p class="section-label">Key Points</p>
+          <ul class="key-points-list" id="key-points-list"></ul>
+
+          <div class="divider"></div>
+
+          <p class="section-label">Extracted Entities</p>
+          <div class="entity-grid" id="entity-grid"></div>
+
+          <button type="button" class="source-toggle" id="source-toggle" aria-expanded="false">
+            <span>View extracted source text</span>
+            <span class="chevron" aria-hidden="true">▼</span>
+          </button>
+          <div id="source-panel" hidden>
+            <pre id="source-pre"></pre>
+          </div>
+          <p class="source-trunc-hint" id="source-trunc-hint"></p>
+        </div>
+      </section>
+    </main>
+
+    <aside class="panel-right">
+      <header class="qa-header">
+        <h2><span aria-hidden="true">💬</span> Ask the Document</h2>
+        <p>Answers are grounded in your uploaded document and prior analysis.</p>
+      </header>
+
+      <div class="qa-thread" id="qa-thread" role="log" aria-live="polite"></div>
+
+      <footer class="qa-input-bar">
+        <div class="input-row">
+          <textarea id="qa-input" rows="1" placeholder="Ask a question about this document..." disabled></textarea>
+          <button type="button" id="qa-send" title="Send" disabled aria-label="Send message">➤</button>
+        </div>
+        <p class="input-hint">Press Enter to send · Shift+Enter for new line</p>
+      </footer>
+    </aside>
   </div>
 
-  <script>
-    const ENTITY_LABELS = {
-      monetary_values: 'Monetary values',
-      dates: 'Dates',
-      organizations: 'Organizations',
-      key_metrics: 'Key metrics',
-    };
-
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-    const browseBtn = document.getElementById('browse-btn');
-    const filePreview = document.getElementById('file-preview');
-    const fileNameDisplay = document.getElementById('file-name-display');
-    const fileSizeDisplay = document.getElementById('file-size-display');
-    const removeBtn = document.getElementById('remove-btn');
-    const uploadBtn = document.getElementById('upload-btn');
-    const analyzeBtn = document.getElementById('analyze-btn');
-    const progressWrap = document.getElementById('progress-wrap');
-    const progressFill = document.getElementById('progress-bar-fill');
-    const progressBarTrack = document.getElementById('progress-bar-track');
-    const progressStatus = document.getElementById('progress-status');
-    const processingSteps = document.getElementById('processing-steps');
-    const PROCESS_STEP_LABELS = [
-      'Uploading document...',
-      'Analyzing content...',
-      'Extracting insights...',
-    ];
-    let analyzeStepTimer = null;
-    const uploadResult = document.getElementById('upload-result');
-    const resultsDashboard = document.getElementById('results-dashboard');
-
-    const ICONS = { pdf: '📕', docx: '📘', txt: '📝', csv: '📊' };
-
-    let selectedFile = null;
-    let uploadedFileId = null;
-    let uploadedFileExt = null;
-    let lastAnalysis = null;
-    let uploadedOriginalName = '';
-
-    function formatBytes(bytes) {
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-    }
-
-    function fileExtension(name) {
-      const i = name.lastIndexOf('.');
-      return i >= 0 ? name.slice(i).toLowerCase() : '';
-    }
-
-    function escapeHtml(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function parseFilenameFromContentDisposition(cd) {
-      if (!cd) return '';
-      var star = /filename\*=UTF-8''([^;\n]+)/i.exec(cd);
-      if (star) {
-        try { return decodeURIComponent(star[1].trim()); } catch (e) { /* ignore */ }
-      }
-      var quoted = /filename="([^"]+)"/i.exec(cd);
-      if (quoted) return quoted[1];
-      return '';
-    }
-
-    function downloadBlob(blob, filename) {
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = filename || 'download';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    async function exportReport(kind) {
-      if (!lastAnalysis) return;
-      var pdfBtn = document.getElementById('export-pdf');
-      var docxBtn = document.getElementById('export-docx');
-      var active = kind === 'pdf' ? pdfBtn : docxBtn;
-      if (active && active.disabled) return;
-      if (pdfBtn) pdfBtn.disabled = true;
-      if (docxBtn) docxBtn.disabled = true;
-      try {
-        var analyzedAt = new Date().toISOString();
-        var docName = uploadedOriginalName || ('document' + (uploadedFileExt || ''));
-        var body = {
-          document_name: docName,
-          analyzed_at: analyzedAt,
-          summary: lastAnalysis.summary || '',
-          key_points: Array.isArray(lastAnalysis.key_points) ? lastAnalysis.key_points : [],
-          entities: (lastAnalysis.entities && typeof lastAnalysis.entities === 'object')
-            ? lastAnalysis.entities
-            : {},
-          analysis_source: lastAnalysis.analysis_source || null,
-        };
-        var path = kind === 'pdf' ? '/api/export/pdf' : '/api/export/docx';
-        var res = await fetch(path, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        var fn = parseFilenameFromContentDisposition(res.headers.get('Content-Disposition'));
-        if (!fn) fn = kind === 'pdf' ? 'Analysis_Report.pdf' : 'Analysis_Report.docx';
-        var blob = await res.blob();
-        if (!res.ok) {
-          var errText = await blob.text().catch(function () { return ''; });
-          try {
-            var j = JSON.parse(errText);
-            if (j.detail) errText = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
-          } catch (e) { /* use raw */ }
-          alert('Export failed: ' + (errText || res.statusText));
-          return;
-        }
-        downloadBlob(blob, fn);
-      } catch (e) {
-        alert('Export failed: ' + e.message);
-      } finally {
-        if (pdfBtn) pdfBtn.disabled = false;
-        if (docxBtn) docxBtn.disabled = false;
-      }
-    }
-
-    function setFile(file) {
-      selectedFile = file;
-      const ext = file.name.split('.').pop().toLowerCase();
-      fileNameDisplay.textContent = file.name;
-      fileSizeDisplay.textContent = formatBytes(file.size);
-      document.getElementById('file-type-icon').textContent = ICONS[ext] || '📄';
-      filePreview.style.display = 'flex';
-      uploadBtn.disabled = false;
-      uploadedFileId = null;
-      uploadedFileExt = null;
-      analyzeBtn.disabled = true;
-      lastAnalysis = null;
-      qaHistory = [];
-      uploadedOriginalName = '';
-      hideUploadResult();
-      resultsDashboard.classList.remove('visible');
-      resultsDashboard.innerHTML = '';
-      clearProgress();
-    }
-
-    function clearFile() {
-      selectedFile = null;
-      fileInput.value = '';
-      filePreview.style.display = 'none';
-      uploadBtn.disabled = true;
-      analyzeBtn.disabled = true;
-      uploadedFileId = null;
-      uploadedFileExt = null;
-      lastAnalysis = null;
-      qaHistory = [];
-      uploadedOriginalName = '';
-      hideUploadResult();
-      resultsDashboard.classList.remove('visible');
-      resultsDashboard.innerHTML = '';
-      clearProgress();
-    }
-
-    function hideUploadResult() {
-      uploadResult.classList.remove('visible', 'success', 'error');
-      uploadResult.innerHTML = '';
-    }
-
-    function setProcessingStep(activeIndex, pct) {
-      if (!processingSteps) return;
-      var items = processingSteps.querySelectorAll('li');
-      for (var i = 0; i < items.length; i++) {
-        items[i].classList.remove('active', 'done');
-        if (i < activeIndex) items[i].classList.add('done');
-        else if (i === activeIndex) items[i].classList.add('active');
-      }
-      if (progressStatus && PROCESS_STEP_LABELS[activeIndex]) {
-        progressStatus.textContent = PROCESS_STEP_LABELS[activeIndex];
-      }
-      if (progressBarTrack) {
-        if (pct == null) {
-          progressBarTrack.classList.add('indeterminate');
-          progressFill.style.width = '35%';
-        } else {
-          progressBarTrack.classList.remove('indeterminate');
-          progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
-        }
-      }
-    }
-
-    function showProgress() {
-      progressWrap.classList.add('visible');
-      progressWrap.style.display = 'block';
-    }
-
-    function clearProgress() {
-      if (analyzeStepTimer) {
-        clearTimeout(analyzeStepTimer);
-        analyzeStepTimer = null;
-      }
-      progressWrap.classList.remove('visible');
-      progressWrap.style.display = 'none';
-      progressFill.style.width = '0%';
-      if (progressBarTrack) progressBarTrack.classList.remove('indeterminate');
-      if (processingSteps) {
-        processingSteps.querySelectorAll('li').forEach(function (li) {
-          li.classList.remove('active', 'done');
-        });
-      }
-    }
-
-    function showUploadMessage(type, html) {
-      uploadResult.className = 'panel visible ' + type;
-      uploadResult.innerHTML = html;
-    }
-
-    function renderEntityCard(key, items) {
-      const label = ENTITY_LABELS[key] || key;
-      const list = Array.isArray(items) ? items.filter(Boolean) : [];
-      const inner = list.length
-        ? '<ul>' + list.map(function (x) { return '<li>' + escapeHtml(String(x)) + '</li>'; }).join('') + '</ul>'
-        : '<p class="empty">None identified</p>';
-      return (
-        '<div class="entity-card"><h4>' + escapeHtml(label) + '</h4>' + inner + '</div>'
-      );
-    }
-
-    function renderDashboard(data) {
-      qaHistory = [];
-      lastAnalysis = data;
-      const src = data.analysis_source === 'gemini' ? 'gemini' : 'fallback';
-      const badgeClass = src === 'gemini' ? 'badge-gemini' : 'badge-fallback';
-      const badgeText = src === 'gemini' ? 'AI analysis (Gemini)' : 'Offline fallback';
-
-      const trunc = data.extracted_text_truncated
-        ? '<p class="meta-hint">Source preview: first ' + escapeHtml(String(data.extracted_text_preview?.length ?? 0)) +
-          ' of ' + escapeHtml(String(data.extracted_text_length ?? '')) + ' characters.</p>'
-        : '';
-
-      const keyPoints = Array.isArray(data.key_points) ? data.key_points : [];
-      const kpHtml = keyPoints.length
-        ? '<ul>' + keyPoints.map(function (k) { return '<li>' + escapeHtml(String(k)) + '</li>'; }).join('') + '</ul>'
-        : '<p class="exec-summary">—</p>';
-
-      const ent = data.entities && typeof data.entities === 'object' ? data.entities : {};
-      const entityKeys = ['monetary_values', 'dates', 'organizations', 'key_metrics'];
-      const entityHtml = entityKeys.map(function (k) {
-        return renderEntityCard(k, ent[k]);
-      }).join('');
-
-      resultsDashboard.innerHTML =
-        '<div class="card">' +
-          '<div class="badge-row dashboard-toolbar">' +
-            '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
-            '<div class="export-actions">' +
-              '<button type="button" class="btn btn-ghost" id="export-pdf">Export PDF</button>' +
-              '<button type="button" class="btn btn-ghost" id="export-docx">Export DOCX</button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="section">' +
-            '<div class="section-heading">Executive summary</div>' +
-            '<p class="exec-summary">' + escapeHtml(data.summary || '') + '</p>' +
-          '</div>' +
-          '<div class="section key-points">' +
-            '<div class="section-heading">Key points</div>' + kpHtml +
-          '</div>' +
-          '<div class="section">' +
-            '<div class="section-heading">Extracted entities</div>' +
-            '<div class="entity-grid">' + entityHtml + '</div>' +
-          '</div>' +
-          '<div class="section">' +
-            '<details class="source-text">' +
-              '<summary>View extracted source text</summary>' +
-              '<pre>' + escapeHtml(data.extracted_text_preview || '') + '</pre>' +
-            '</details>' +
-            trunc +
-          '</div>' +
-          '<div class="section">' +
-            '<div class="section-heading qa">Ask questions</div>' +
-            '<p class="meta-hint" style="margin-bottom:0.5rem">Ask in natural language. Answers are grounded in the document; after analysis, follow-ups can refer to the summary, key points, or your earlier questions. Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</p>' +
-            '<div class="qa-box">' +
-              '<textarea id="qa-input" placeholder="e.g. What is the total budget?"></textarea>' +
-              '<button type="button" class="btn btn-primary" id="qa-submit" style="max-width:220px">Ask</button>' +
-              '<div id="qa-log"></div>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-
-      resultsDashboard.classList.add('visible');
-
-      document.getElementById('qa-submit').addEventListener('click', submitQuestion);
-      document.getElementById('export-pdf').addEventListener('click', function () { exportReport('pdf'); });
-      document.getElementById('export-docx').addEventListener('click', function () { exportReport('docx'); });
-      const qaInputEl = document.getElementById('qa-input');
-      if (qaInputEl) {
-        qaInputEl.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            submitQuestion();
-          }
-        });
-      }
-    }
-
-    async function submitQuestion() {
-      const input = document.getElementById('qa-input');
-      const log = document.getElementById('qa-log');
-      const q = (input && input.value || '').trim();
-      if (!q || !uploadedFileId || !uploadedFileExt) return;
-
-      const btn = document.getElementById('qa-submit');
-      if (!btn || btn.disabled) return;
-      btn.disabled = true;
-      try {
-        const body = {
-            file_id: uploadedFileId,
-            file_ext: uploadedFileExt,
-            question: q,
-            conversation: qaHistory.length ? qaHistory.slice() : undefined,
-          };
-        if (lastAnalysis && (lastAnalysis.summary || (lastAnalysis.key_points && lastAnalysis.key_points.length))) {
-          body.insights = {
-            summary: lastAnalysis.summary || '',
-            key_points: lastAnalysis.key_points || [],
-            entities: lastAnalysis.entities || {},
-          };
-        }
-
-        const res = await fetch('/api/ask', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const payload = await res.json().catch(function () { return {}; });
-        const detail = typeof payload.detail === 'string' ? payload.detail : res.statusText;
-        const answer = res.ok ? (payload.answer || '') : ('Error: ' + detail);
-        if (res.ok && answer) {
-          qaHistory.push({ question: q, answer: answer });
-        }
-        const turn = document.createElement('div');
-        turn.className = 'qa-turn';
-        turn.innerHTML =
-          '<div class="q">Q: ' + escapeHtml(q) + '</div>' +
-          '<div class="a">' + escapeHtml(answer) + '</div>';
-        log.appendChild(turn);
-        input.value = '';
-        log.scrollTop = log.scrollHeight;
-      } catch (e) {
-        const turn = document.createElement('div');
-        turn.className = 'qa-turn';
-        turn.innerHTML =
-          '<div class="q">Q: ' + escapeHtml(q) + '</div>' +
-          '<div class="a">' + escapeHtml(e.message) + '</div>';
-        log.appendChild(turn);
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    browseBtn.addEventListener('click', function () { fileInput.click(); });
-    dropZone.addEventListener('click', function (e) {
-      if (e.target !== browseBtn) fileInput.click();
-    });
-    dropZone.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      dropZone.classList.add('drag-over');
-    });
-    dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('drag-over'); });
-    dropZone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
-      const f = e.dataTransfer.files[0];
-      if (f) setFile(f);
-    });
-    fileInput.addEventListener('change', function () {
-      if (fileInput.files[0]) setFile(fileInput.files[0]);
-    });
-    removeBtn.addEventListener('click', clearFile);
-
-    uploadBtn.addEventListener('click', async function () {
-      if (!selectedFile) return;
-      uploadBtn.disabled = true;
-      analyzeBtn.disabled = true;
-      showProgress();
-      setProcessingStep(0, 5);
-      hideUploadResult();
-      resultsDashboard.classList.remove('visible');
-      resultsDashboard.innerHTML = '';
-
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      try {
-        const xhr = await new Promise(function (resolve, reject) {
-          const x = new XMLHttpRequest();
-          x.upload.addEventListener('progress', function (e) {
-            if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              setProcessingStep(0, pct);
-            }
-          });
-          x.addEventListener('load', function () { resolve(x); });
-          x.addEventListener('error', function () { reject(new Error('Network error')); });
-          x.open('POST', '/api/upload');
-          x.send(formData);
-        });
-        setProcessingStep(0, 100);
-        let data = {};
-        try { data = JSON.parse(xhr.responseText); } catch (_) {}
-
-        if (xhr.status === 200) {
-          uploadedFileId = data.file_id;
-          uploadedFileExt = data.file_ext || fileExtension(selectedFile.name);
-          uploadedOriginalName = selectedFile ? selectedFile.name : '';
-          analyzeBtn.disabled = !uploadedFileId;
-          showUploadMessage('success',
-            '<h2>Upload complete</h2><p>File ID: <span class="file-id">' + escapeHtml(uploadedFileId) + '</span></p>' +
-            '<p style="margin-top:0.45rem;font-size:0.82rem">Run <strong>Analyze</strong> to open the results dashboard.</p>');
-        } else {
-          uploadedFileId = null;
-          uploadedFileExt = null;
-          uploadedOriginalName = '';
-          const detail = typeof data.detail === 'string' ? data.detail : (xhr.statusText || 'Unknown error');
-          showUploadMessage('error', '<h2>Upload failed</h2><p>' + escapeHtml(String(detail)) + '</p>');
-        }
-      } catch (err) {
-        uploadedFileId = null;
-        uploadedFileExt = null;
-        uploadedOriginalName = '';
-        showUploadMessage('error', '<h2>Upload failed</h2><p>' + escapeHtml(err.message) + '</p>');
-      } finally {
-        uploadBtn.disabled = false;
-        analyzeBtn.disabled = !uploadedFileId;
-        setTimeout(clearProgress, 400);
-      }
-    });
-
-    analyzeBtn.addEventListener('click', async function () {
-      if (!uploadedFileId || !uploadedFileExt) return;
-      analyzeBtn.disabled = true;
-      uploadBtn.disabled = true;
-      showProgress();
-      setProcessingStep(1, null);
-      analyzeStepTimer = setTimeout(function () {
-        setProcessingStep(2, null);
-      }, 1800);
-
-      try {
-        const res = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file_id: uploadedFileId, file_ext: uploadedFileExt }),
-        });
-        const data = await res.json().catch(function () { return {}; });
-        if (analyzeStepTimer) {
-          clearTimeout(analyzeStepTimer);
-          analyzeStepTimer = null;
-        }
-        setProcessingStep(2, 100);
-
-        if (!res.ok) {
-          const detail = typeof data.detail === 'string' ? data.detail : res.statusText;
-          resultsDashboard.innerHTML =
-            '<div class="card panel error visible" style="display:block"><h2>Analysis failed</h2><p>' +
-            escapeHtml(detail) + '</p></div>';
-          resultsDashboard.classList.add('visible');
-          return;
-        }
-        renderDashboard(data);
-      } catch (err) {
-        resultsDashboard.innerHTML =
-          '<div class="card panel error visible" style="display:block"><h2>Analysis failed</h2><p>' +
-          escapeHtml(err.message) + '</p></div>';
-        resultsDashboard.classList.add('visible');
-      } finally {
-        analyzeBtn.disabled = false;
-        uploadBtn.disabled = false;
-        setTimeout(clearProgress, 600);
-      }
-    });
-  </script>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
