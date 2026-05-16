@@ -1,10 +1,13 @@
 import logging
 import os
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
+from backend.services.analysis_export import build_analysis_docx, build_analysis_pdf
 from backend.services.document_analyzer import DocumentAnalyzer
 from backend.services.document_processor import extract_text_from_bytes
 from backend.services.supabase_service import download_from_storage, upload_to_storage
@@ -259,3 +262,72 @@ async def ask_document(request: AskRequest) -> dict:
             status_code=500,
             detail="An unexpected error occurred while answering your question.",
         )
+
+
+# ---------------------------------------------------------------------------
+# Export analysis (PDF / DOCX)
+# ---------------------------------------------------------------------------
+
+
+class ExportAnalysisRequest(BaseModel):
+    document_name: str = "document"
+    analyzed_at: str | None = None
+    summary: str = ""
+    key_points: list[str] = Field(default_factory=list)
+    entities: dict[str, list[str]] = Field(default_factory=dict)
+    analysis_source: str | None = None
+
+
+def _content_disposition_attachment(filename: str) -> str:
+    ascii_fn = "".join(c if ord(c) < 128 and c not in '\"\\\\' else "_" for c in filename) or "export"
+    return f'attachment; filename="{ascii_fn}"; filename*=UTF-8\'\'{quote(filename)}'
+
+
+@router.post("/export/pdf")
+async def export_analysis_pdf_endpoint(request: ExportAnalysisRequest) -> Response:
+    try:
+        content, filename = build_analysis_pdf(
+            document_name=request.document_name,
+            analyzed_at=request.analyzed_at or "",
+            summary=request.summary,
+            key_points=request.key_points,
+            entities=request.entities,
+            analysis_source=request.analysis_source,
+        )
+    except ImportError as exc:
+        logger.exception("PDF export dependency missing or wrong package")
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc) or "PDF export is not available. Install fpdf2 in your environment.",
+        ) from exc
+    except Exception:
+        logger.exception("PDF export failed")
+        raise HTTPException(status_code=500, detail="Could not generate PDF export.") from None
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": _content_disposition_attachment(filename)},
+    )
+
+
+@router.post("/export/docx")
+async def export_analysis_docx_endpoint(request: ExportAnalysisRequest) -> Response:
+    try:
+        content, filename = build_analysis_docx(
+            document_name=request.document_name,
+            analyzed_at=request.analyzed_at or "",
+            summary=request.summary,
+            key_points=request.key_points,
+            entities=request.entities,
+            analysis_source=request.analysis_source,
+        )
+    except Exception:
+        logger.exception("DOCX export failed")
+        raise HTTPException(status_code=500, detail="Could not generate DOCX export.") from None
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={"Content-Disposition": _content_disposition_attachment(filename)},
+    )
